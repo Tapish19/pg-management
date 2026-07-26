@@ -43,17 +43,17 @@ export const Route = createFileRoute("/")({
 
 function TopNav() {
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto max-w-7xl h-16 px-4 sm:px-6 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground font-bold">
+        <Link to="/" className="flex items-center gap-2.5">
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-primary-foreground font-display font-semibold rotate-[-4deg] shadow-[0_1px_0_0_var(--color-border)]">
             PG
           </div>
-          <span className="font-semibold tracking-tight text-lg">PG One</span>
+          <span className="font-display font-semibold tracking-tight text-lg">PG One</span>
         </Link>
         <nav className="hidden md:flex items-center gap-8 text-sm">
           <Link to="/browse" className="text-muted-foreground hover:text-foreground">
-            Browse
+            Browse rooms
           </Link>
           <a href="#features" className="text-muted-foreground hover:text-foreground">
             For owners
@@ -81,23 +81,32 @@ function TopNav() {
 function Hero() {
   return (
     <section className="relative overflow-hidden">
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-accent/40 via-background to-background" />
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 lg:py-32">
+      <div
+        className="absolute inset-0 -z-10 opacity-[0.05]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(-45deg, var(--ink) 0, var(--ink) 1px, transparent 1px, transparent 14px)",
+        }}
+      />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 lg:py-28">
         <div className="max-w-3xl">
-          <Badge variant="secondary" className="mb-4 gap-1">
-            <Sparkles className="h-3 w-3" /> Now serving 3 cities
-          </Badge>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-            The modern way to <span className="text-primary">find</span>,{" "}
-            <span className="text-primary">book</span> and <span className="text-primary">run</span>{" "}
-            your PG.
+          <div className="keytag keytag--filled mb-5">
+            <Sparkles className="h-3 w-3" /> now handing out keys in 3 cities
+          </div>
+          <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.75rem] font-semibold tracking-tight leading-[1.05]">
+            Find a room, get the keys,{" "}
+            <span className="relative whitespace-nowrap">
+              <span className="relative z-10">move in.</span>
+              <span className="absolute inset-x-0 bottom-1.5 h-3 -z-0 bg-primary/50" />
+            </span>
           </h1>
           <p className="mt-5 text-lg text-muted-foreground max-w-2xl">
-            Browse verified PGs with clear pricing and honest reviews. Owners get a complete
-            dashboard for properties, bookings, rent, staff and food — all in one place.
+            Every listing here comes with a real room, a real rent number and a real key tag —
+            no brokers, no "call for price." Owners run the whole PG — rent, staff, food,
+            complaints — from the same place.
           </p>
         </div>
-        <Card className="mt-10 p-4 sm:p-5">
+        <Card className="ticket-edge mt-10 p-4 sm:p-5 border-dashed">
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -119,10 +128,10 @@ function Hero() {
             </Button>
           </div>
         </Card>
-        <div className="mt-6 flex flex-wrap gap-4 text-sm text-muted-foreground">
+        <div className="mt-6 flex flex-wrap gap-2.5">
           {["Verified listings", "Zero brokerage", "Free cancellation", "24×7 support"].map((t) => (
-            <span key={t} className="inline-flex items-center gap-1.5">
-              <Check className="h-4 w-4 text-primary" />
+            <span key={t} className="keytag">
+              <Check className="h-3 w-3" />
               {t}
             </span>
           ))}
@@ -137,7 +146,9 @@ function Featured() {
     <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
       <div className="flex items-end justify-between mb-8">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Featured PGs</h2>
+          <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
+            Featured PGs
+          </h2>
           <p className="text-muted-foreground mt-1">Handpicked properties with the best reviews.</p>
         </div>
         <Link
@@ -151,13 +162,16 @@ function Featured() {
         {PROPERTIES.map((p) => (
           <Link key={p.id} to="/pg/$id" params={{ id: p.id }} className="group">
             <Card className="overflow-hidden pt-0 h-full transition-shadow hover:shadow-elegant">
-              <div className="aspect-[4/3] overflow-hidden bg-muted">
+              <div className="relative aspect-[4/3] overflow-hidden bg-muted">
                 <img
                   src={p.image}
                   alt={p.name}
                   loading="lazy"
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                 />
+                <div className="keytag keytag--filled absolute top-3 left-3">
+                  {formatCurrency(p.rentFrom)}/mo
+                </div>
               </div>
               <div className="p-4">
                 <div className="flex items-center justify-between gap-2">
@@ -170,14 +184,8 @@ function Featured() {
                 <div className="text-xs text-muted-foreground mt-0.5 truncate">
                   {p.area}, {p.city}
                 </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="text-sm">
-                    <span className="font-semibold">{formatCurrency(p.rentFrom)}</span>
-                    <span className="text-muted-foreground">/mo</span>
-                  </div>
-                  <Badge variant="secondary" className="capitalize">
-                    {p.gender}
-                  </Badge>
+                <div className="mt-3">
+                  <span className="keytag capitalize">{p.gender}</span>
                 </div>
               </div>
             </Card>
@@ -200,7 +208,7 @@ function Amenities() {
   return (
     <section className="bg-secondary/40 border-y">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-14">
-        <h2 className="text-center text-2xl sm:text-3xl font-bold tracking-tight">
+        <h2 className="font-display text-center text-2xl sm:text-3xl font-semibold tracking-tight">
           Everything you'd want in a PG
         </h2>
         <p className="text-center text-muted-foreground mt-2 max-w-xl mx-auto">
@@ -251,12 +259,12 @@ function ForOwners() {
           <Badge variant="secondary" className="mb-3">
             For owners
           </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            Run a PG like a real business.
+          <h2 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+            Run it like a business, not a group chat.
           </h2>
           <p className="mt-3 text-muted-foreground">
-            PG One replaces spreadsheets and WhatsApp with a single, premium dashboard. Get
-            owner-grade reports, staff-grade operations and tenant-grade delight.
+            PG One replaces the WhatsApp group, the rent notebook and the loose visitor register
+            with one dashboard — built from the actual paperwork of running a PG.
           </p>
           <div className="mt-6 flex gap-3">
             <Button asChild>
@@ -287,7 +295,7 @@ function Testimonials() {
   return (
     <section className="bg-secondary/40 border-y">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-        <h2 className="text-center text-2xl sm:text-3xl font-bold tracking-tight">
+        <h2 className="font-display text-center text-2xl sm:text-3xl font-semibold tracking-tight">
           Loved by residents
         </h2>
         <div className="mt-10 grid gap-5 md:grid-cols-3">
@@ -299,7 +307,7 @@ function Testimonials() {
                 ))}
               </div>
               <p className="mt-3 text-sm">"{r.text}"</p>
-              <div className="mt-4 text-xs font-medium text-muted-foreground">{r.name}</div>
+              <div className="mt-4 text-xs font-tag text-muted-foreground">{r.name}</div>
             </Card>
           ))}
         </div>
@@ -311,7 +319,7 @@ function Testimonials() {
 function FAQ() {
   return (
     <section id="faq" className="mx-auto max-w-3xl px-4 sm:px-6 py-16">
-      <h2 className="text-center text-2xl sm:text-3xl font-bold tracking-tight">
+      <h2 className="font-display text-center text-2xl sm:text-3xl font-semibold tracking-tight">
         Frequently asked
       </h2>
       <Accordion type="single" collapsible className="mt-8">
@@ -329,8 +337,8 @@ function FAQ() {
 function Contact() {
   return (
     <section id="contact" className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
-      <Card className="p-8 sm:p-12 bg-gradient-to-br from-primary/10 via-accent/40 to-background text-center">
-        <h2 className="text-3xl font-bold tracking-tight">List your PG on PG One</h2>
+      <Card className="p-8 sm:p-12 bg-gradient-to-br from-primary/15 via-accent/40 to-background text-center">
+        <h2 className="font-display text-3xl font-semibold tracking-tight">List your PG on PG One</h2>
         <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
           Join hundreds of owners running smoother operations. Setup takes under 10 minutes.
         </p>
