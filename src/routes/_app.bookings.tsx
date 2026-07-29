@@ -20,6 +20,8 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/bookings")({ component: BookingsPage });
 
+type BookingStatus = "pending" | "confirmed" | "active" | "checked_out" | "cancelled";
+
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   confirmed: "Confirmed",
@@ -39,7 +41,7 @@ function BookingsPage() {
 
   async function handleStatusChange(id: string, status: string) {
     try {
-      await updateBookingStatus({ data: { id, status: status as any } });
+      await updateBookingStatus({ data: { id, status: status as BookingStatus } });
       queryClient.invalidateQueries({ queryKey: ["bookings", "mine"] });
       queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
       queryClient.invalidateQueries({ queryKey: ["rooms", "mine"] });

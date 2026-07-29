@@ -32,6 +32,8 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/complaints")({ component: ComplaintsPage });
 
+type ComplaintStatus = "open" | "in-progress" | "resolved" | "closed";
+
 function ComplaintsPage() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -54,7 +56,7 @@ function ComplaintsPage() {
 
   async function handleStatusChange(id: string, status: string) {
     try {
-      await updateComplaint({ data: { id, status: status as any } });
+      await updateComplaint({ data: { id, status: status as ComplaintStatus } });
       queryClient.invalidateQueries({ queryKey: ["complaints", "mine"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update ticket");

@@ -55,6 +55,21 @@ export const tenants = sqliteTable("tenants", {
   createdAt: text("created_at").default(sql`(current_timestamp)`),
 });
 
+// Tenant lifestyle preference survey — powers the roommate/room compatibility engine
+export const tenantPreferences = sqliteTable("tenant_preferences", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().unique().references(() => tenants.id),
+  sleepSchedule: text("sleep_schedule").notNull().default("flexible"), // early_bird | night_owl | flexible
+  cleanliness: integer("cleanliness").notNull().default(3), // 1 (relaxed) - 5 (very tidy)
+  noiseTolerance: integer("noise_tolerance").notNull().default(3), // 1 (needs quiet) - 5 (doesn't mind noise)
+  socialLevel: integer("social_level").notNull().default(3), // 1 (keeps to self) - 5 (very social)
+  foodHabit: text("food_habit").notNull().default("veg"), // veg | nonveg | vegan | eggetarian
+  smoking: integer("smoking", { mode: "boolean" }).notNull().default(false),
+  guestsFrequency: text("guests_frequency").notNull().default("occasional"), // rare | occasional | frequent
+  workSchedule: text("work_schedule").notNull().default("office"), // wfh | office | student | night_shift
+  updatedAt: text("updated_at").default(sql`(current_timestamp)`),
+});
+
 // Staff members employed at a property
 export const staff = sqliteTable("staff", {
   id: text("id").primaryKey(),

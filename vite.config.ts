@@ -12,4 +12,7 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Render (and most non-Cloudflare hosts) run a plain Node process, so override the
+  // library's cloudflare-module default preset with Nitro's Node server preset.
+  nitro: { preset: "node-server" },
 });

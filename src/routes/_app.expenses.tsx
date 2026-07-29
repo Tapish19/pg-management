@@ -30,6 +30,8 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/expenses")({ component: ExpensesPage });
 
+type ExpenseStatus = "pending" | "approved" | "rejected";
+
 function formatCurrency(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
 }
@@ -51,9 +53,9 @@ function ExpensesPage() {
   const total = (expenseList || []).reduce((s, e) => s + e.amount, 0);
   const pending = (expenseList || []).filter((e) => e.status === "pending").reduce((s, e) => s + e.amount, 0);
 
-  async function handleStatusChange(id: string, status: string) {
+  async function handleStatusChange(id: string, status: ExpenseStatus) {
     try {
-      await updateExpenseStatus({ data: { id, status: status as any } });
+      await updateExpenseStatus({ data: { id, status } });
       queryClient.invalidateQueries({ queryKey: ["expenses", "mine"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update expense");
@@ -128,7 +130,10 @@ function ExpensesPage() {
                     <TableCell>{e.date}</TableCell>
                     <TableCell>{formatCurrency(e.amount)}</TableCell>
                     <TableCell>
-                      <Select value={e.status} onValueChange={(v) => handleStatusChange(e.id, v)}>
+                      <Select
+                        value={e.status}
+                        onValueChange={(v) => handleStatusChange(e.id, v as ExpenseStatus)}
+                      >
                         <SelectTrigger className="h-7 w-[120px] text-xs p-0 border-0 bg-transparent">
                           <StatusPill tone={statusTone(e.status)}>{e.status}</StatusPill>
                         </SelectTrigger>

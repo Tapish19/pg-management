@@ -18,6 +18,8 @@ import { Route as AppComplaintsRouteImport } from './routes/_app.complaints'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppExpensesRouteImport } from './routes/_app.expenses'
 import { Route as AppFoodRouteImport } from './routes/_app.food'
+import { Route as AppMatchingRouteImport } from './routes/_app.matching'
+import { Route as AppMyAssistantRouteImport } from './routes/_app.my-assistant'
 import { Route as AppMyComplaintsRouteImport } from './routes/_app.my-complaints'
 import { Route as AppMyFoodRouteImport } from './routes/_app.my-food'
 import { Route as AppMyRoomRouteImport } from './routes/_app.my-room'
@@ -80,6 +82,16 @@ const AppExpensesRoute = AppExpensesRouteImport.update({
 const AppFoodRoute = AppFoodRouteImport.update({
   id: '/food',
   path: '/food',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMatchingRoute = AppMatchingRouteImport.update({
+  id: '/matching',
+  path: '/matching',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMyAssistantRoute = AppMyAssistantRouteImport.update({
+  id: '/my-assistant',
+  path: '/my-assistant',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMyComplaintsRoute = AppMyComplaintsRouteImport.update({
@@ -187,6 +199,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/food': typeof AppFoodRoute
+  '/matching': typeof AppMatchingRoute
+  '/my-assistant': typeof AppMyAssistantRoute
   '/my-complaints': typeof AppMyComplaintsRoute
   '/my-food': typeof AppMyFoodRoute
   '/my-room': typeof AppMyRoomRoute
@@ -216,6 +230,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/food': typeof AppFoodRoute
+  '/matching': typeof AppMatchingRoute
+  '/my-assistant': typeof AppMyAssistantRoute
   '/my-complaints': typeof AppMyComplaintsRoute
   '/my-food': typeof AppMyFoodRoute
   '/my-room': typeof AppMyRoomRoute
@@ -247,6 +263,8 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/expenses': typeof AppExpensesRoute
   '/_app/food': typeof AppFoodRoute
+  '/_app/matching': typeof AppMatchingRoute
+  '/_app/my-assistant': typeof AppMyAssistantRoute
   '/_app/my-complaints': typeof AppMyComplaintsRoute
   '/_app/my-food': typeof AppMyFoodRoute
   '/_app/my-room': typeof AppMyRoomRoute
@@ -278,6 +296,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/expenses'
     | '/food'
+    | '/matching'
+    | '/my-assistant'
     | '/my-complaints'
     | '/my-food'
     | '/my-room'
@@ -307,6 +327,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/expenses'
     | '/food'
+    | '/matching'
+    | '/my-assistant'
     | '/my-complaints'
     | '/my-food'
     | '/my-room'
@@ -337,6 +359,8 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/expenses'
     | '/_app/food'
+    | '/_app/matching'
+    | '/_app/my-assistant'
     | '/_app/my-complaints'
     | '/_app/my-food'
     | '/_app/my-room'
@@ -430,6 +454,20 @@ declare module '@tanstack/react-router' {
       path: '/food'
       fullPath: '/food'
       preLoaderRoute: typeof AppFoodRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/matching': {
+      id: '/_app/matching'
+      path: '/matching'
+      fullPath: '/matching'
+      preLoaderRoute: typeof AppMatchingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/my-assistant': {
+      id: '/_app/my-assistant'
+      path: '/my-assistant'
+      fullPath: '/my-assistant'
+      preLoaderRoute: typeof AppMyAssistantRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/my-complaints': {
@@ -574,6 +612,8 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppFoodRoute: typeof AppFoodRoute
+  AppMatchingRoute: typeof AppMatchingRoute
+  AppMyAssistantRoute: typeof AppMyAssistantRoute
   AppMyComplaintsRoute: typeof AppMyComplaintsRoute
   AppMyFoodRoute: typeof AppMyFoodRoute
   AppMyRoomRoute: typeof AppMyRoomRoute
@@ -599,6 +639,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppFoodRoute: AppFoodRoute,
+  AppMatchingRoute: AppMatchingRoute,
+  AppMyAssistantRoute: AppMyAssistantRoute,
   AppMyComplaintsRoute: AppMyComplaintsRoute,
   AppMyFoodRoute: AppMyFoodRoute,
   AppMyRoomRoute: AppMyRoomRoute,

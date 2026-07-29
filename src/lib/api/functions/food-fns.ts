@@ -20,7 +20,9 @@ export const getFoodMenu = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const existing = await db.select().from(foodMenu).where(eq(foodMenu.propertyId, data.propertyId)).all();
     if (existing.length > 0) {
-      return DAYS.map((day) => existing.find((m) => m.day === day)).filter(Boolean);
+      return DAYS.map((day) => existing.find((m) => m.day === day)).filter(
+        (m): m is NonNullable<typeof m> => m != null,
+      );
     }
     // Seed empty rows so the page has something to edit
     const seeded = [];

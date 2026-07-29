@@ -14,6 +14,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type KycStatus = "verified" | "pending" | "missing";
 import { StatusPill, statusTone } from "@/components/ui-ext/stat";
 import {
   Table,
@@ -28,7 +30,14 @@ import { Plus, Search } from "lucide-react";
 import { listOwnerTenants, onboardTenant, updateTenantKyc } from "@/lib/api/functions/bookings-fns";
 import { listProperties } from "@/lib/api/functions/properties-fns";
 import { listOwnerRooms } from "@/lib/api/functions/rooms-fns";
+import { listTenantRiskScores } from "@/lib/api/functions/risk-fns";
 import { toast } from "sonner";
+
+const RISK_BAND_TONE: Record<string, "success" | "warning" | "destructive"> = {
+  low: "success",
+  medium: "warning",
+  high: "destructive",
+};
 
 export const Route = createFileRoute("/_app/tenants")({ component: TenantsPage });
 
@@ -55,6 +64,13 @@ function TenantsPage() {
     queryKey: ["rooms", "mine"],
     queryFn: () => listOwnerRooms(),
   });
+
+  const { data: riskScores } = useQuery({
+    queryKey: ["tenants", "risk-scores"],
+    queryFn: () => listTenantRiskScores(),
+  });
+
+  const riskByTenantId = new Map((riskScores || []).map((r) => [r.tenantId, r]));
 
   const filtered = (tenantRows || []).filter((row) => {
     if (!search.trim()) return true;
@@ -124,18 +140,19 @@ function TenantsPage() {
                 <TableHead>Rent</TableHead>
                 <TableHead>KYC</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Default Risk</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No tenants yet. Onboard your first tenant to get started.
                   </TableCell>
                 </TableRow>
@@ -165,7 +182,7 @@ function TenantsPage() {
                       <TableCell>{row.booking.checkInDate}</TableCell>
                       <TableCell>{formatCurrency(row.booking.monthlyRent)}</TableCell>
                       <TableCell>
-                        <Select value={t.kycStatus} onValueChange={(v) => handleKyc(t.id, v as any)}>
+                        <Select value={t.kycStatus} onValueChange={(v) => handleKyc(t.id, v as KycStatus)}>
                           <SelectTrigger className="h-7 w-[110px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
@@ -178,6 +195,17 @@ function TenantsPage() {
                       </TableCell>
                       <TableCell>
                         <StatusPill tone={statusTone(row.booking.status)}>{row.booking.status}</StatusPill>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const risk = riskByTenantId.get(t.id);
+                          if (!risk) return <span className="text-xs text-muted-foreground">—</span>;
+                          return (
+                            <StatusPill tone={RISK_BAND_TONE[risk.riskBand]}>
+                              {risk.riskBand} · {Math.round(risk.riskProbability * 100)}%
+                            </StatusPill>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   );

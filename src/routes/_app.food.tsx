@@ -97,7 +97,7 @@ function PropertyMenu({ propertyId }: { propertyId: string }) {
               </tr>
             </thead>
             <tbody>
-              {(menu || []).map((m: any, i: number) => (
+              {(menu || []).map((m, i: number) => (
                 <tr key={m.id} className={i > 0 ? "border-t" : ""}>
                   <td className="p-3 font-medium align-top">{m.day}</td>
                   {editing === m.id ? (

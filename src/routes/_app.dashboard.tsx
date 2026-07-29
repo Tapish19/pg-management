@@ -84,8 +84,11 @@ function AdminDashboard() {
   const { data: staffList } = useQuery({ queryKey: ["staff", "mine"], queryFn: () => listOwnerStaff() });
   const { data: complaints } = useQuery({ queryKey: ["complaints", "mine"], queryFn: () => listOwnerComplaints() });
 
-  const totalBeds = (properties || []).reduce((s, p: any) => s + (p.totalBeds ?? 0), 0);
-  const occupied = (properties || []).reduce((s, p: any) => s + (p.occupiedBeds ?? 0), 0);
+  const totalBeds = (properties || []).reduce((s, p) => s + (p.totalBeds ?? 0), 0);
+  const occupied = (properties || []).reduce(
+    (s, p) => s + ((p.totalBeds ?? 0) - (p.availableBeds ?? 0)),
+    0,
+  );
   const activeTenants = (tenantRows || []).filter((r) => r.booking.status === "active").length;
   const monthlyRevenue = (bookings || [])
     .filter((b) => b.status === "active" || b.status === "confirmed")
@@ -308,7 +311,7 @@ function StaffDashboard() {
 
   const tasks = (complaints || []).filter((c) => c.status !== "resolved" && c.status !== "closed");
   const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
-  const todaysMenu = (menu || []).find((m: any) => m.day === today) as
+  const todaysMenu = (menu || []).find((m) => m.day === today) as
     | { breakfast: string; lunch: string; dinner: string }
     | undefined;
 

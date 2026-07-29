@@ -25,6 +25,8 @@ import {
   UserCheck,
   FileText,
   Menu,
+  Bot,
+  UsersRound,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
@@ -55,6 +57,7 @@ const ADMIN_NAV: NavItem[] = [
   { to: "/rooms", label: "Rooms & Beds", icon: DoorOpen },
   { to: "/bookings", label: "Bookings", icon: CalendarCheck },
   { to: "/tenants", label: "Tenants", icon: Users },
+  { to: "/matching", label: "Roommate Matching", icon: UsersRound },
   { to: "/payments", label: "Rent & Payments", icon: Wallet },
   { to: "/staff", label: "Staff", icon: UserCog },
   { to: "/food", label: "Food & Menu", icon: UtensilsCrossed },
@@ -80,6 +83,7 @@ const STAFF_NAV: NavItem[] = [
 const TENANT_NAV: NavItem[] = [
   { to: "/dashboard", label: "My Home", icon: Home },
   { to: "/my-room", label: "My Room", icon: DoorOpen },
+  { to: "/my-assistant", label: "Ask Assistant", icon: Bot },
   { to: "/pay-rent", label: "Pay Rent", icon: CreditCard },
   { to: "/my-food", label: "Food Menu", icon: UtensilsCrossed },
   { to: "/my-complaints", label: "Complaints", icon: MessageSquare },

@@ -1,0 +1,22 @@
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { getSession } from "../auth";
+import { askAssistant } from "../../rag/chain";
+
+function requireSession() {
+  const session = getSession();
+  if (!session) throw new Error("Please log in first");
+  return session;
+}
+
+// Tenant-facing: ask the RAG assistant a question about hostel policies/FAQs.
+// If the assistant isn't confident it can answer from the indexed docs, it
+// returns resolved:false and the UI should offer to file it as a complaint
+// / route it to staff instead of showing a guessed answer.
+export const askAssistantFn = createServerFn({ method: "POST" })
+  .validator((input: unknown) => z.object({ question: z.string().min(3).max(500) }).parse(input))
+  .handler(async ({ data }) => {
+    requireSession();
+    const result = await askAssistant(data.question);
+    return result;
+  });

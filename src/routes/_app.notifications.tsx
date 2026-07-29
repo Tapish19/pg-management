@@ -15,10 +15,11 @@ export const Route = createFileRoute("/_app/notifications")({ component: Notific
 function NotificationsPage() {
   const { user } = useAuth();
 
-  if (user?.role === "tenant") return <TenantNotifications />;
-
   // Owner / staff: general in-app notifications (not yet backed by a persisted table)
   const [items, setItems] = useState(NOTIFICATIONS);
+
+  if (user?.role === "tenant") return <TenantNotifications />;
+
   const mine = items.filter((n) => !user || n.role === user.role || n.role === "all");
   const markAllRead = () => setItems((prev) => prev.map((n) => ({ ...n, read: true })));
   const toggle = (id: string) =>
