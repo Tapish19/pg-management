@@ -1,11 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSession } from "../auth";
+import { getTenantSession } from "../auth";
 import { askAssistant } from "../../rag/chain";
 
 function requireSession() {
-  const session = getSession();
-  if (!session) throw new Error("Please log in first");
+  const session = getTenantSession();
+  if (!session) throw new Error("Please sign in first");
   return session;
 }
 
