@@ -17,6 +17,11 @@
 
 const MODEL = "llama-3.1-8b-instant";
 
+// Hard cap so a stalled Groq request can't ride along until the platform's
+// SSR watchdog (120s) kills the whole render. Fails fast with a diagnosable
+// message instead.
+const TIMEOUT_MS = 15_000;
+
 export async function generateAnswer(
   question: string,
   contextChunks: string[]
@@ -41,26 +46,40 @@ export async function generateAnswer(
     `Context:\n${context}`,
   ].join("\n");
 
-  // Groq's API follows the OpenAI Chat Completions schema.
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 300,
-        temperature: 0.3,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: question },
-        ],
-      }),
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    // Groq's API follows the OpenAI Chat Completions schema.
+    response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 300,
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: question },
+          ],
+        }),
+        signal: controller.signal,
+      }
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Groq API timed out after ${TIMEOUT_MS}ms.`);
     }
-  );
+    throw new Error(`Groq API request failed: ${(err as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
