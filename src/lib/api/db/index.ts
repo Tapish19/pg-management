@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/libsql";
+import { migrate } from "drizzle-orm/libsql/migrator";
 import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 import path from "path";
@@ -20,3 +21,22 @@ const client = process.env.TURSO_DATABASE_URL
     });
 
 export const db = drizzle(client, { schema });
+
+// Auto-apply schema migrations on boot instead of requiring a manual
+// `npm run db:push` from a local machine — there's no local git/CLI setup
+// in this deployment flow, and this makes a fresh Turso database (or a
+// fresh local file) work automatically on first request. Safe to run every
+// startup: drizzle tracks applied migrations and only runs new ones.
+let migrationsReady: Promise<void> | null = null;
+
+export function ensureMigrated(): Promise<void> {
+  if (!migrationsReady) {
+    migrationsReady = migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") }).catch(
+      (err) => {
+        migrationsReady = null; // allow retry on next request instead of caching a failure forever
+        throw err;
+      }
+    );
+  }
+  return migrationsReady;
+}
