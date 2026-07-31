@@ -59,7 +59,7 @@ export async function ingest(): Promise<void> {
     rawDocs.map((d) => d.pageContent),
     rawDocs.map((d) => d.metadata)
   );
-  console.log(`Split into ${chunks.length} chunk(s). Embedding locally (first run downloads the model)...`);
+  console.log(`Split into ${chunks.length} chunk(s). Requesting embeddings from Cohere...`);
 
   const embeddings = new LocalEmbeddings();
 

@@ -13,11 +13,10 @@ import { COLLECTION_NAME } from "./ingest";
 // target (it silently keeps using localhost). So we construct the
 // chromadb client ourselves and hand it to LangChain via `index`, which it
 // uses as-is.
-const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
 const CHROMA_URL = process.env.CHROMA_URL ?? "http://localhost:8000";
 
 function makeChromaClient(): ChromaClient {
-  return CHROMA_API_KEY ? new CloudClient() : new ChromaClient({ path: CHROMA_URL });
+  return process.env.CHROMA_API_KEY ? new CloudClient() : new ChromaClient({ path: CHROMA_URL });
 }
 
 // Below this similarity, we don't trust the retrieved context enough to

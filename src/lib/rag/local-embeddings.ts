@@ -19,19 +19,30 @@ import { Embeddings, type EmbeddingsParams } from "@langchain/core/embeddings";
 // the old local model, you MUST re-run `npm run rag:ingest` after this
 // change — old vectors were 384-dim (MiniLM), these are 1024-dim
 // (Cohere embed-english-v3.0) and are not compatible.
-const COHERE_API_KEY = process.env.COHERE_API_KEY;
+
 const MODEL_NAME = "embed-english-v3.0";
 
-async function cohereEmbed(texts: string[], inputType: "search_document" | "search_query"): Promise<number[][]> {
-  if (!COHERE_API_KEY) {
-    throw new Error("COHERE_API_KEY is not set. Add it in your environment variables.");
+async function cohereEmbed(
+  texts: string[],
+  inputType: "search_document" | "search_query"
+): Promise<number[][]> {
+  // Read lazily (not as a module-level const) — this file gets imported
+  // before ingest.ts's env-file loading runs (ES module imports execute
+  // before the rest of the importing file's top-level code), so caching
+  // this at import time would always see `undefined`.
+  const apiKey = process.env.COHERE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "COHERE_API_KEY is not set. Add it in your environment variables."
+    );
   }
 
   const response = await fetch("https://api.cohere.com/v2/embed", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${COHERE_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: MODEL_NAME,
@@ -48,7 +59,10 @@ async function cohereEmbed(texts: string[], inputType: "search_document" | "sear
 
   const data = await response.json();
   const vectors = data.embeddings?.float;
-  if (!vectors) throw new Error("No embeddings in Cohere API response.");
+
+  if (!vectors) {
+    throw new Error("No embeddings in Cohere API response.");
+  }
 
   return vectors as number[][];
 }

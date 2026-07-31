@@ -14,15 +14,24 @@
 // https://console.groq.com/keys. Uses llama-3.1-8b-instant: Groq's
 // cheapest/fastest model, a good fit for short retrieval-grounded FAQ
 // answers.
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
 const MODEL = "llama-3.1-8b-instant";
 
-export async function generateAnswer(question: string, contextChunks: string[]): Promise<string> {
-  if (!GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not set. Add it in your environment variables.");
+export async function generateAnswer(
+  question: string,
+  contextChunks: string[]
+): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "GROQ_API_KEY is not set. Add it in your environment variables."
+    );
   }
 
-  const context = contextChunks.map((c, i) => `[${i + 1}] ${c}`).join("\n\n");
+  const context = contextChunks
+    .map((c, i) => `[${i + 1}] ${c}`)
+    .join("\n\n");
 
   const systemPrompt = [
     "You are a helpful hostel assistant. Answer the tenant's question using ONLY the context below.",
@@ -33,22 +42,25 @@ export async function generateAnswer(question: string, contextChunks: string[]):
   ].join("\n");
 
   // Groq's API follows the OpenAI Chat Completions schema.
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 300,
-      temperature: 0.3,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: question },
-      ],
-    }),
-  });
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 300,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: question },
+        ],
+      }),
+    }
+  );
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
@@ -57,7 +69,10 @@ export async function generateAnswer(question: string, contextChunks: string[]):
 
   const data = await response.json();
   const answer = data.choices?.[0]?.message?.content;
-  if (!answer) throw new Error("No content in Groq API response.");
+
+  if (!answer) {
+    throw new Error("No content in Groq API response.");
+  }
 
   return (answer as string).trim();
 }
