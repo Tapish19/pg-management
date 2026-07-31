@@ -1,6 +1,16 @@
 import { createStart, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { ensureMigrated } from "./lib/api/db";
+
+// Runs pending schema migrations before the first request that needs them.
+// Cached as a single in-flight promise (see ensureMigrated) so concurrent
+// requests don't race to migrate — subsequent calls just await the same
+// promise. No manual `npm run db:push` step needed.
+const migrationMiddleware = createMiddleware().server(async ({ next }) => {
+  await ensureMigrated();
+  return next();
+});
 
 // Diagnostic-only: log which request is being rendered and how long it
 // takes. Purpose is to give the Render logs a request URL to correlate with
@@ -36,5 +46,5 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [requestLogMiddleware, errorMiddleware],
+  requestMiddleware: [requestLogMiddleware, migrationMiddleware, errorMiddleware],
 }));
