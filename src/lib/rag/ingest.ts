@@ -2,7 +2,17 @@ import fs from "fs";
 import path from "path";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { Chroma } from "@langchain/community/vectorstores/chroma";
+import { CloudClient, ChromaClient } from "chromadb";
 import { LocalEmbeddings } from "./local-embeddings";
+
+// `tsx` (unlike `vite dev`) doesn't auto-load .env.local, so load it
+// ourselves when running this script directly. No-ops if the file doesn't
+// exist (e.g. on Render, where env vars are set directly).
+try {
+  process.loadEnvFile(path.join(process.cwd(), ".env.local"));
+} catch {
+  // .env.local not found — fine, assume env vars are already set
+}
 
 const DOCS_DIR = path.join(process.cwd(), "content", "hostel-docs");
 export const COLLECTION_NAME = "hostel-policies-faqs";
@@ -14,10 +24,17 @@ export const COLLECTION_NAME = "hostel-policies-faqs";
 //   pip install chromadb
 //   chroma run --path ./chroma-data
 // CHROMA_URL defaults to the standard local port in that case.
+//
+// NOTE: @langchain/community's Chroma wrapper has a bug where passing
+// `chromaCloudAPIKey`/`clientParams` doesn't actually change the connection
+// target (it silently keeps using localhost). So we construct the chromadb
+// client ourselves and hand it to LangChain via `index`, which it uses as-is.
 const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
-const CHROMA_TENANT = process.env.CHROMA_TENANT;
-const CHROMA_DATABASE = process.env.CHROMA_DATABASE;
 const CHROMA_URL = process.env.CHROMA_URL ?? "http://localhost:8000";
+
+function makeChromaClient(): ChromaClient {
+  return CHROMA_API_KEY ? new CloudClient() : new ChromaClient({ path: CHROMA_URL });
+}
 
 async function loadDocs(): Promise<{ pageContent: string; metadata: Record<string, string> }[]> {
   const files = fs.readdirSync(DOCS_DIR).filter((f) => f.endsWith(".md"));
@@ -48,9 +65,7 @@ export async function ingest(): Promise<void> {
 
   await Chroma.fromDocuments(chunks, embeddings, {
     collectionName: COLLECTION_NAME,
-    ...(CHROMA_API_KEY
-      ? { chromaCloudAPIKey: CHROMA_API_KEY, clientParams: { tenant: CHROMA_TENANT, database: CHROMA_DATABASE } }
-      : { url: CHROMA_URL }),
+    index: makeChromaClient(),
   });
 
   console.log(
@@ -61,7 +76,8 @@ export async function ingest(): Promise<void> {
 }
 
 // Allow running directly: `npx tsx src/lib/rag/ingest.ts`
-if (require.main === module) {
+import { fileURLToPath } from "url";
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   ingest()
     .then(() => process.exit(0))
     .catch((err) => {

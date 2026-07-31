@@ -1,4 +1,5 @@
 import { Chroma } from "@langchain/community/vectorstores/chroma";
+import { CloudClient, ChromaClient } from "chromadb";
 import { LocalEmbeddings } from "./local-embeddings";
 import { generateAnswer } from "./local-llm";
 import { COLLECTION_NAME } from "./ingest";
@@ -6,10 +7,18 @@ import { COLLECTION_NAME } from "./ingest";
 // Chroma Cloud (https://trychroma.com) — set CHROMA_API_KEY / CHROMA_TENANT /
 // CHROMA_DATABASE to use it. If CHROMA_API_KEY is unset, falls back to a
 // self-hosted Chroma server at CHROMA_URL (default localhost:8000).
+//
+// NOTE: @langchain/community's Chroma wrapper has a bug where passing
+// `chromaCloudAPIKey`/`clientParams` doesn't actually change the connection
+// target (it silently keeps using localhost). So we construct the
+// chromadb client ourselves and hand it to LangChain via `index`, which it
+// uses as-is.
 const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
-const CHROMA_TENANT = process.env.CHROMA_TENANT;
-const CHROMA_DATABASE = process.env.CHROMA_DATABASE;
 const CHROMA_URL = process.env.CHROMA_URL ?? "http://localhost:8000";
+
+function makeChromaClient(): ChromaClient {
+  return CHROMA_API_KEY ? new CloudClient() : new ChromaClient({ path: CHROMA_URL });
+}
 
 // Below this similarity, we don't trust the retrieved context enough to
 // answer — this is what "resolved without staff intervention" actually
@@ -25,9 +34,7 @@ function getVectorStore(): Promise<Chroma> {
     const embeddings = new LocalEmbeddings();
     vectorStorePromise = Chroma.fromExistingCollection(embeddings, {
       collectionName: COLLECTION_NAME,
-      ...(CHROMA_API_KEY
-        ? { chromaCloudAPIKey: CHROMA_API_KEY, clientParams: { tenant: CHROMA_TENANT, database: CHROMA_DATABASE } }
-        : { url: CHROMA_URL }),
+      index: makeChromaClient(),
     });
   }
   return vectorStorePromise;
