@@ -3,6 +3,12 @@ import { LocalEmbeddings } from "./local-embeddings";
 import { generateAnswer } from "./local-llm";
 import { COLLECTION_NAME } from "./ingest";
 
+// Chroma Cloud (https://trychroma.com) — set CHROMA_API_KEY / CHROMA_TENANT /
+// CHROMA_DATABASE to use it. If CHROMA_API_KEY is unset, falls back to a
+// self-hosted Chroma server at CHROMA_URL (default localhost:8000).
+const CHROMA_API_KEY = process.env.CHROMA_API_KEY;
+const CHROMA_TENANT = process.env.CHROMA_TENANT;
+const CHROMA_DATABASE = process.env.CHROMA_DATABASE;
 const CHROMA_URL = process.env.CHROMA_URL ?? "http://localhost:8000";
 
 // Below this similarity, we don't trust the retrieved context enough to
@@ -19,7 +25,9 @@ function getVectorStore(): Promise<Chroma> {
     const embeddings = new LocalEmbeddings();
     vectorStorePromise = Chroma.fromExistingCollection(embeddings, {
       collectionName: COLLECTION_NAME,
-      url: CHROMA_URL,
+      ...(CHROMA_API_KEY
+        ? { chromaCloudAPIKey: CHROMA_API_KEY, clientParams: { tenant: CHROMA_TENANT, database: CHROMA_DATABASE } }
+        : { url: CHROMA_URL }),
     });
   }
   return vectorStorePromise;
