@@ -22,6 +22,11 @@ import { Embeddings, type EmbeddingsParams } from "@langchain/core/embeddings";
 
 const MODEL_NAME = "embed-english-v3.0";
 
+// Hard cap so a stalled Cohere request can't ride along until the platform's
+// SSR watchdog (120s) kills the whole render. Fails fast with a diagnosable
+// message instead.
+const TIMEOUT_MS = 10_000;
+
 async function cohereEmbed(
   texts: string[],
   inputType: "search_document" | "search_query"
@@ -38,19 +43,33 @@ async function cohereEmbed(
     );
   }
 
-  const response = await fetch("https://api.cohere.com/v2/embed", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL_NAME,
-      texts,
-      input_type: inputType,
-      embedding_types: ["float"],
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch("https://api.cohere.com/v2/embed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        texts,
+        input_type: inputType,
+        embedding_types: ["float"],
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Cohere embed API timed out after ${TIMEOUT_MS}ms.`);
+    }
+    throw new Error(`Cohere embed API request failed: ${(err as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
