@@ -32,6 +32,24 @@ export const loginTenant = createServerFn({ method: "POST" })
     const email = data.email.trim().toLowerCase();
     const phone = data.phone.trim();
     const allTenants = await db.select().from(tenants).all();
+
+    // TEMP DIAGNOSTIC — remove once the login mismatch is resolved. Logs the
+    // normalized value we searched for plus every candidate whose email
+    // matches (to isolate an email-vs-phone mismatch) without dumping the
+    // full tenants table.
+    console.log(`[loginTenant] searching for email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`);
+    console.log(`[loginTenant] total tenants in db: ${allTenants.length}`);
+    const emailMatches = allTenants.filter((t) => t.email.trim().toLowerCase() === email);
+    if (emailMatches.length === 0) {
+      console.log(`[loginTenant] no tenant row has that email at all`);
+    } else {
+      for (const t of emailMatches) {
+        console.log(
+          `[loginTenant] email matched tenant id=${t.id} stored phone=${JSON.stringify(t.phone.trim())} — equal? ${t.phone.trim() === phone}`,
+        );
+      }
+    }
+
     const match = allTenants.find(
       (t) => t.email.trim().toLowerCase() === email && t.phone.trim() === phone,
     );
