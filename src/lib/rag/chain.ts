@@ -26,14 +26,47 @@ function makeChromaClient(): ChromaClient {
 const RELEVANCE_THRESHOLD = 0.45;
 const TOP_K = 4;
 
+// The chromadb/LangChain client doesn't expose an AbortSignal, so a bad
+// CHROMA_TENANT/CHROMA_DATABASE value or an unreachable host can hang
+// indefinitely instead of erroring. Race every Chroma call against a hard
+// deadline so it fails fast with a diagnosable message instead of riding
+// along until the platform's SSR watchdog (120s) kills the whole render.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms.`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+const CHROMA_CONNECT_TIMEOUT_MS = 10_000;
+const CHROMA_QUERY_TIMEOUT_MS = 10_000;
+
 let vectorStorePromise: Promise<Chroma> | null = null;
 
 function getVectorStore(): Promise<Chroma> {
   if (!vectorStorePromise) {
     const embeddings = new LocalEmbeddings();
-    vectorStorePromise = Chroma.fromExistingCollection(embeddings, {
-      collectionName: COLLECTION_NAME,
-      index: makeChromaClient(),
+    vectorStorePromise = withTimeout(
+      Chroma.fromExistingCollection(embeddings, {
+        collectionName: COLLECTION_NAME,
+        index: makeChromaClient(),
+      }),
+      CHROMA_CONNECT_TIMEOUT_MS,
+      "Chroma connection"
+    ).catch((err) => {
+      // Don't cache a failed connection attempt — let the next request retry
+      // (e.g. after env vars are fixed) instead of permanently failing.
+      vectorStorePromise = null;
+      throw err;
     });
   }
   return vectorStorePromise;
@@ -52,7 +85,11 @@ export async function askAssistant(question: string): Promise<AssistantResponse>
   // similaritySearchWithScore returns cosine similarity via Chroma's default
   // "l2"/"cosine" space depending on collection config; we configure the
   // collection for cosine similarity at ingest time so higher = more similar.
-  const results = await store.similaritySearchWithScore(question, TOP_K);
+  const results = await withTimeout(
+    store.similaritySearchWithScore(question, TOP_K),
+    CHROMA_QUERY_TIMEOUT_MS,
+    "Chroma similarity search"
+  );
 
   if (results.length === 0) {
     return {
