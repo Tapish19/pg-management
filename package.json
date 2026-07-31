@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "rag:ingest": "tsx src/lib/rag/ingest.ts",
     "rag:eval": "tsx src/lib/rag/eval.ts",
+    "db:push": "drizzle-kit push",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
