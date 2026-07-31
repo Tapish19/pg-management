@@ -1,5 +1,5 @@
-// Answer generation via the xAI Grok API (hosted), rather than running a
-// local transformer model in-process.
+// Answer generation via the Groq API (hosted, OpenAI-compatible), rather
+// than running a local transformer model in-process.
 //
 // Why hosted at all: running a local generation model (previously
 // Xenova/LaMini-Flan-T5, 248M params) via CPU inference inside a web
@@ -7,17 +7,19 @@
 // model download + inference time exceeded the platform's SSR request
 // timeout (120s), causing the whole service to hang and cycle-restart.
 // A hosted API call is fast, doesn't need to load any model, and won't
-// block the event loop.
+// block the event loop. Groq also has a free tier (no card required),
+// which is more than enough for a small app like this.
 //
-// Requires XAI_API_KEY to be set (Render -> Environment). Get one at
-// https://console.x.ai. Uses grok-4-1-fast: cheap, fast, good fit for
-// short retrieval-grounded FAQ answers.
-const XAI_API_KEY = process.env.XAI_API_KEY;
-const MODEL = "grok-4-1-fast";
+// Requires GROQ_API_KEY to be set (Render -> Environment). Get one at
+// https://console.groq.com/keys. Uses llama-3.1-8b-instant: Groq's
+// cheapest/fastest model, a good fit for short retrieval-grounded FAQ
+// answers.
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const MODEL = "llama-3.1-8b-instant";
 
 export async function generateAnswer(question: string, contextChunks: string[]): Promise<string> {
-  if (!XAI_API_KEY) {
-    throw new Error("XAI_API_KEY is not set. Add it in your environment variables.");
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not set. Add it in your environment variables.");
   }
 
   const context = contextChunks.map((c, i) => `[${i + 1}] ${c}`).join("\n\n");
@@ -30,12 +32,12 @@ export async function generateAnswer(question: string, contextChunks: string[]):
     `Context:\n${context}`,
   ].join("\n");
 
-  // xAI's API is OpenAI-compatible (Chat Completions schema).
-  const response = await fetch("https://api.x.ai/v1/chat/completions", {
+  // Groq's API follows the OpenAI Chat Completions schema.
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${XAI_API_KEY}`,
+      Authorization: `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
       model: MODEL,
@@ -50,12 +52,12 @@ export async function generateAnswer(question: string, contextChunks: string[]):
 
   if (!response.ok) {
     const errText = await response.text().catch(() => "");
-    throw new Error(`xAI API error (${response.status}): ${errText}`);
+    throw new Error(`Groq API error (${response.status}): ${errText}`);
   }
 
   const data = await response.json();
   const answer = data.choices?.[0]?.message?.content;
-  if (!answer) throw new Error("No content in xAI API response.");
+  if (!answer) throw new Error("No content in Groq API response.");
 
   return (answer as string).trim();
 }
