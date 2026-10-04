@@ -14,8 +14,8 @@ function requireSession() {
 
 // Public: list all properties, optionally filtered by city or owner
 export const listProperties = createServerFn({ method: "GET" })
-  .validator((input: unknown) =>
-    z.object({ city: z.string().optional(), ownerId: z.string().optional() }).optional().parse(input ?? {})
+  .validator((input: unknown): { city?: string; ownerId?: string } =>
+    z.object({ city: z.string().optional(), ownerId: z.string().optional() }).parse(input ?? {})
   )
   .handler(async ({ data }) => {
     let list = data?.ownerId
@@ -51,7 +51,7 @@ export const listOwnerProperties = createServerFn({ method: "GET" }).handler(asy
 
 // Public: get one property with its rooms
 export const getProperty = createServerFn({ method: "GET" })
-  .validator((input: unknown) => z.object({ id: z.string() }).parse(input))
+  .validator((input: unknown): { id: string } => z.object({ id: z.string() }).parse(input))
   .handler(async ({ data }) => {
     const property = await db.select().from(properties).where(eq(properties.id, data.id)).get();
     if (!property) throw new Error("Property not found");

@@ -73,7 +73,7 @@ async function buildFeaturesForTenant(tenantId: string): Promise<RiskFeatures | 
 }
 
 export const getTenantRiskScore = createServerFn({ method: "GET" })
-  .validator((input: unknown) => z.object({ tenantId: z.string() }).parse(input))
+  .validator((input: unknown): { tenantId: string } => z.object({ tenantId: z.string() }).parse(input))
   .handler(async ({ data }) => {
     requireSession();
     const features = await buildFeaturesForTenant(data.tenantId);

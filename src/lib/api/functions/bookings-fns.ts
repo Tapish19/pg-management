@@ -83,6 +83,8 @@ export const createBooking = createServerFn({ method: "POST" })
 
     const tenantId = genId("tenant");
     await db.insert(tenants).values({ id: tenantId, ...data.tenant });
+    // TEMP DIAGNOSTIC — remove once tenant login is confirmed working.
+    console.log(`[diag] createBooking inserted tenant id=${tenantId} email="${data.tenant.email}" phone="${data.tenant.phone}"`);
 
     const bookingId = genId("booking");
     await db.insert(bookings).values({

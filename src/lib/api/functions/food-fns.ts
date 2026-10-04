@@ -16,7 +16,7 @@ function requireSession() {
 
 // Get (or lazily seed) the weekly menu for a property
 export const getFoodMenu = createServerFn({ method: "GET" })
-  .validator((input: unknown) => z.object({ propertyId: z.string() }).parse(input))
+  .validator((input: unknown): { propertyId: string } => z.object({ propertyId: z.string() }).parse(input))
   .handler(async ({ data }) => {
     const existing = await db.select().from(foodMenu).where(eq(foodMenu.propertyId, data.propertyId)).all();
     if (existing.length > 0) {

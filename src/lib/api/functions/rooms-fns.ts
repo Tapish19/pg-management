@@ -13,7 +13,7 @@ function requireSession() {
 }
 
 export const listRooms = createServerFn({ method: "GET" })
-  .validator((input: unknown) => z.object({ propertyId: z.string() }).parse(input))
+  .validator((input: unknown): { propertyId: string } => z.object({ propertyId: z.string() }).parse(input))
   .handler(async ({ data }) => {
     const list = await db.select().from(rooms).where(eq(rooms.propertyId, data.propertyId)).all();
     return list.map((r) => ({ ...r, amenities: JSON.parse(r.amenities || "[]") as string[] }));

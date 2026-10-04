@@ -17,6 +17,13 @@ export const askAssistantFn = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.object({ question: z.string().min(3).max(500) }).parse(input))
   .handler(async ({ data }) => {
     requireSession();
-    const result = await askAssistant(data.question);
-    return result;
+    try {
+      return await askAssistant(data.question);
+    } catch (error) {
+      // The client-side catch in _app.my-assistant.tsx only shows a generic
+      // "something went wrong" message, so log the real cause here — this
+      // runs server-side and will show up in Render's logs.
+      console.error("[assistant] askAssistant failed:", error);
+      throw error;
+    }
   });

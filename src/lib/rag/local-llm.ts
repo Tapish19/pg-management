@@ -1,46 +1,97 @@
-import { pipeline, type Text2TextGenerationPipeline } from "@xenova/transformers";
-
-// Small, free, local instruction-tuned model for answer generation — no API
-// key required. LaMini-Flan-T5 is a distilled instruction-following model
-// (248M params) that runs acceptably on CPU and is commonly used for local
-// RAG demos where hitting a paid LLM API isn't an option.
+// Answer generation via the Groq API (hosted, OpenAI-compatible), rather
+// than running a local transformer model in-process.
 //
-// Swap-in point: to use a hosted model instead (OpenAI / Anthropic / etc.)
-// for higher answer quality, replace `generateAnswer` below with a call to
-// that provider's chat completions endpoint using the same prompt — the
-// retrieval half of the pipeline (Chroma + LocalEmbeddings) stays identical.
-const MODEL_NAME = "Xenova/LaMini-Flan-T5-248M";
+// Why hosted at all: running a local generation model (previously
+// Xenova/LaMini-Flan-T5, 248M params) via CPU inference inside a web
+// request handler was too slow on Render's instance size — first-load
+// model download + inference time exceeded the platform's SSR request
+// timeout (120s), causing the whole service to hang and cycle-restart.
+// A hosted API call is fast, doesn't need to load any model, and won't
+// block the event loop. Groq also has a free tier (no card required),
+// which is more than enough for a small app like this.
+//
+// Requires GROQ_API_KEY to be set (Render -> Environment). Get one at
+// https://console.groq.com/keys. Uses llama-3.1-8b-instant: Groq's
+// cheapest/fastest model, a good fit for short retrieval-grounded FAQ
+// answers.
 
-let generatorPromise: Promise<Text2TextGenerationPipeline> | null = null;
+const MODEL = "llama-3.1-8b-instant";
 
-function getGenerator(): Promise<Text2TextGenerationPipeline> {
-  if (!generatorPromise) {
-    generatorPromise = pipeline("text2text-generation", MODEL_NAME) as Promise<Text2TextGenerationPipeline>;
+// Hard cap so a stalled Groq request can't ride along until the platform's
+// SSR watchdog (120s) kills the whole render. Fails fast with a diagnosable
+// message instead.
+const TIMEOUT_MS = 15_000;
+
+export async function generateAnswer(
+  question: string,
+  contextChunks: string[]
+): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "GROQ_API_KEY is not set. Add it in your environment variables."
+    );
   }
-  return generatorPromise;
-}
 
-export async function generateAnswer(question: string, contextChunks: string[]): Promise<string> {
-  const generator = await getGenerator();
+  const context = contextChunks
+    .map((c, i) => `[${i + 1}] ${c}`)
+    .join("\n\n");
 
-  const context = contextChunks.map((c, i) => `[${i + 1}] ${c}`).join("\n\n");
-
-  const prompt = [
+  const systemPrompt = [
     "You are a helpful hostel assistant. Answer the tenant's question using ONLY the context below.",
     "If the answer isn't in the context, say you don't have that information and suggest contacting staff.",
     "Be concise (2-4 sentences).",
     "",
     `Context:\n${context}`,
-    "",
-    `Question: ${question}`,
-    "Answer:",
   ].join("\n");
 
-  const output = await generator(prompt, {
-    max_new_tokens: 200,
-    temperature: 0.3,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const result = Array.isArray(output) ? output[0] : output;
-  return (result as { generated_text: string }).generated_text.trim();
+  let response: Response;
+  try {
+    // Groq's API follows the OpenAI Chat Completions schema.
+    response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 300,
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: question },
+          ],
+        }),
+        signal: controller.signal,
+      }
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Groq API timed out after ${TIMEOUT_MS}ms.`);
+    }
+    throw new Error(`Groq API request failed: ${(err as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    throw new Error(`Groq API error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const answer = data.choices?.[0]?.message?.content;
+
+  if (!answer) {
+    throw new Error("No content in Groq API response.");
+  }
+
+  return (answer as string).trim();
 }
