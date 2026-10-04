@@ -43,6 +43,12 @@ export const listProperties = createServerFn({ method: "GET" })
     });
   });
 
+// Owner: list only the authenticated owner's properties.
+export const listOwnerProperties = createServerFn({ method: "GET" }).handler(async () => {
+  const session = requireSession();
+  return listProperties({ data: { ownerId: session.ownerId } });
+});
+
 // Public: get one property with its rooms
 export const getProperty = createServerFn({ method: "GET" })
   .validator((input: unknown) => z.object({ id: z.string() }).parse(input))

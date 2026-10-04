@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 import { listOwnerComplaints, createComplaint, updateComplaint } from "@/lib/api/functions/complaints-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listOwnerStaff } from "@/lib/api/functions/staff-fns";
 import { toast } from "sonner";
 
@@ -46,7 +46,7 @@ function ComplaintsPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const { data: staffList } = useQuery({

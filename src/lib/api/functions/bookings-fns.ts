@@ -157,7 +157,11 @@ export const updateTenantKyc = createServerFn({ method: "POST" })
     z.object({ id: z.string(), kycStatus: z.enum(["verified", "pending", "missing"]) }).parse(input)
   )
   .handler(async ({ data }) => {
-    requireSession();
+    const session = requireSession();
+    const ownedProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+    const ownedIds = new Set(ownedProperties.map((p) => p.id));
+    const tenantBookings = await db.select().from(bookings).where(eq(bookings.tenantId, data.id)).all();
+    if (!tenantBookings.some((b) => ownedIds.has(b.propertyId))) throw new Error("Tenant not found");
     await db.update(tenants).set({ kycStatus: data.kycStatus }).where(eq(tenants.id, data.id));
     return { ok: true };
   });

@@ -43,7 +43,7 @@ export const getOwnerReports = createServerFn({ method: "GET" }).handler(async (
   const collectionRate = totalInvoiced > 0 ? Math.round((totalRevenue / totalInvoiced) * 100) : 0;
 
   // Group revenue + expense by month (yyyy-mm)
-  const ownerExpenses = (await db.select().from(expenses).all()).filter((e) => propertyIds.has(e.propertyId));
+  const ownerExpenses = (await db.select().from(expenses).all()).filter((e) => propertyIds.has(e.propertyId) && e.status === "approved");
   const monthKey = (d: string | null | undefined) => (d ? d.slice(0, 7) : "unknown");
   const monthMap = new Map<string, { month: string; revenue: number; expense: number }>();
   for (const p of paidPayments) {

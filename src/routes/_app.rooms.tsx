@@ -17,7 +17,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus } from "lucide-react";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listRooms, createRoom } from "@/lib/api/functions/rooms-fns";
 import { toast } from "sonner";
 
@@ -33,7 +33,7 @@ function RoomsPage() {
 
   const { data: properties, isLoading: propsLoading } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const firstPropertyId = properties?.[0]?.id;

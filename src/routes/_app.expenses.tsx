@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Receipt, Plus } from "lucide-react";
 import { listOwnerExpenses, createExpense, updateExpenseStatus } from "@/lib/api/functions/expenses-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/expenses")({ component: ExpensesPage });
@@ -47,7 +47,7 @@ function ExpensesPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const total = (expenseList || []).reduce((s, e) => s + e.amount, 0);

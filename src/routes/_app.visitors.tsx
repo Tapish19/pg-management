@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
 import { listOwnerVisitors, createVisitor, checkOutVisitor } from "@/lib/api/functions/visitors-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listOwnerTenants } from "@/lib/api/functions/bookings-fns";
 import { toast } from "sonner";
 
@@ -42,7 +42,7 @@ function VisitorsPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const { data: tenantRows } = useQuery({

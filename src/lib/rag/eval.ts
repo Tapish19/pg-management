@@ -1,4 +1,6 @@
 import { askAssistant } from "./chain";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 // Labeled eval set: realistic tenant questions, a mix of ones that ARE
 // covered by the policy docs (shouldResolve: true) and ones that AREN'T
@@ -43,7 +45,7 @@ async function runEval() {
   console.log(`Escalation accuracy (resolved/escalated matched expectation): ${((correct / EVAL_SET.length) * 100).toFixed(1)}%`);
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   runEval()
     .then(() => process.exit(0))
     .catch((err) => {

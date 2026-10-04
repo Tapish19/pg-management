@@ -212,7 +212,10 @@ function PayRentPage() {
           <div className="font-semibold mb-3">Booking summary</div>
           <div className="space-y-1.5 text-sm">
             <Row l="Monthly rent" v={formatCurrency(booking.booking.monthlyRent)} />
-            <Row l="Deposit paid" v={formatCurrency(booking.booking.depositAmount)} />
+            <Row l="Deposit required" v={formatCurrency(booking.booking.depositAmount)} />
+            <Row l="Deposit paid" v={paymentsLoading ? "Loading..." : formatCurrency((paymentHistory ?? [])
+              .filter((p) => p.bookingId === booking.booking.id && p.type === "deposit" && p.status === "paid")
+              .reduce((sum, p) => sum + p.amount, 0))} />
             <Row l="Move-in" v={booking.booking.checkInDate} />
           </div>
           <Badge variant="secondary" className="mt-3">

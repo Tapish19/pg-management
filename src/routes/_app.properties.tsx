@@ -17,7 +17,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Building2, Plus, Search } from "lucide-react";
-import { listProperties, createProperty } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties, createProperty } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/properties")({ component: PropertiesPage });
@@ -33,7 +33,7 @@ function PropertiesPage() {
 
   const { data: properties, isLoading } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const filtered = (properties ?? []).filter((p) =>

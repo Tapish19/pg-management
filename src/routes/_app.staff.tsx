@@ -26,7 +26,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus } from "lucide-react";
 import { listOwnerStaff, createStaff, updateStaffStatus } from "@/lib/api/functions/staff-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/staff")({ component: StaffPage });
@@ -46,7 +46,7 @@ function StaffPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   async function toggleStatus(id: string, current: string) {

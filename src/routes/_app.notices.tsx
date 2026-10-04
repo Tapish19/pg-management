@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Megaphone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { listOwnerNotices, createNotice } from "@/lib/api/functions/notices-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/notices")({ component: NoticesPage });
@@ -36,7 +36,7 @@ function NoticesPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   return (

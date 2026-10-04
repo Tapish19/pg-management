@@ -4,6 +4,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { bookings, complaints, foodMenu, notices, payments, properties, rooms, tenants, visitors } from "../db/schema";
 import { genId } from "../id";
+import { selectCurrentBooking } from "../../booking-selection";
 import {
   createTenantSessionToken,
   setTenantSessionCookie,
@@ -20,9 +21,7 @@ function requireTenantSession() {
 // Resolve the tenant's most relevant booking (active > confirmed > pending, most recent)
 async function getPrimaryBooking(tenantId: string) {
   const rows = await db.select().from(bookings).where(eq(bookings.tenantId, tenantId)).all();
-  if (rows.length === 0) return null;
-  const rank: Record<string, number> = { active: 0, confirmed: 1, pending: 2, checked_out: 3, cancelled: 4 };
-  return rows.sort((a, b) => (rank[a.status] ?? 9) - (rank[b.status] ?? 9))[0];
+  return selectCurrentBooking(rows);
 }
 
 // Tenant sign-in: matches email + phone against an existing tenant record with a booking

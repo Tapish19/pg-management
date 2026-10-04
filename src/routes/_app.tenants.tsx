@@ -28,7 +28,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus, Search } from "lucide-react";
 import { listOwnerTenants, onboardTenant, updateTenantKyc } from "@/lib/api/functions/bookings-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listOwnerRooms } from "@/lib/api/functions/rooms-fns";
 import { listTenantRiskScores } from "@/lib/api/functions/risk-fns";
 import { toast } from "sonner";
@@ -57,7 +57,7 @@ function TenantsPage() {
 
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   const { data: rooms } = useQuery({
@@ -111,7 +111,11 @@ function TenantsPage() {
                 onCreated={() => {
                   setOpen(false);
                   queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
-                  queryClient.invalidateQueries({ queryKey: ["rooms", "mine"] });
+                  queryClient.invalidateQueries({ queryKey: ["rooms"] });
+                  queryClient.invalidateQueries({ queryKey: ["properties"] });
+                  queryClient.invalidateQueries({ queryKey: ["bookings"] });
+                  queryClient.invalidateQueries({ queryKey: ["reports"] });
+                  queryClient.invalidateQueries({ queryKey: ["owner-room-matches"] });
                 }}
               />
             </DialogContent>

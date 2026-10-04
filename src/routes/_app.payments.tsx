@@ -16,6 +16,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Wallet, AlertTriangle, CheckCircle2, Clock, Download } from "lucide-react";
 import { listOwnerPayments } from "@/lib/api/functions/payments-fns";
+import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/_app/payments")({ component: PaymentsPage });
 
@@ -41,7 +42,10 @@ function PaymentsPage() {
         title="Rent & Payments"
         description="Invoices, dues and collections."
         actions={
-          <Button variant="outline">
+          <Button variant="outline" disabled={isLoading || rows.length === 0} onClick={() => downloadCsv("pg-one-payments.csv", [
+            ["Payment", "Tenant", "Type", "Month", "Amount (INR)", "Paid at", "Status"],
+            ...rows.map((p) => [p.id, p.tenant?.name, p.type, p.month, p.amount, p.paidAt, p.status]),
+          ])}>
             <Download className="h-4 w-4 mr-1" />
             Export
           </Button>

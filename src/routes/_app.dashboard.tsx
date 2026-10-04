@@ -38,7 +38,7 @@ import {
   NOTIFICATIONS,
 } from "@/lib/demo-data";
 import { useQuery } from "@tanstack/react-query";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listOwnerTenants, listOwnerBookings } from "@/lib/api/functions/bookings-fns";
 import { listOwnerStaff } from "@/lib/api/functions/staff-fns";
 import { listOwnerComplaints } from "@/lib/api/functions/complaints-fns";
@@ -78,7 +78,7 @@ function Dashboard() {
 
 // ---------- ADMIN ----------
 function AdminDashboard() {
-  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listProperties() });
+  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listOwnerProperties() });
   const { data: tenantRows } = useQuery({ queryKey: ["tenants", "mine"], queryFn: () => listOwnerTenants() });
   const { data: bookings } = useQuery({ queryKey: ["bookings", "mine"], queryFn: () => listOwnerBookings() });
   const { data: staffList } = useQuery({ queryKey: ["staff", "mine"], queryFn: () => listOwnerStaff() });
@@ -301,7 +301,7 @@ function StaffDashboard() {
   const { user } = useAuth();
   const { data: complaints } = useQuery({ queryKey: ["complaints", "mine"], queryFn: () => listOwnerComplaints() });
   const { data: visitors } = useQuery({ queryKey: ["visitors", "mine"], queryFn: () => listOwnerVisitors() });
-  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listProperties() });
+  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listOwnerProperties() });
   const firstPropertyId = properties?.[0]?.id;
   const { data: menu } = useQuery({
     queryKey: ["food-menu", firstPropertyId],

@@ -44,7 +44,10 @@ function BookingsPage() {
       await updateBookingStatus({ data: { id, status: status as BookingStatus } });
       queryClient.invalidateQueries({ queryKey: ["bookings", "mine"] });
       queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
-      queryClient.invalidateQueries({ queryKey: ["rooms", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      queryClient.invalidateQueries({ queryKey: ["properties"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["owner-room-matches"] });
       toast.success("Booking updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update booking");

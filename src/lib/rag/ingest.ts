@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "node:url";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { Chroma } from "@langchain/community/vectorstores/chroma";
 import { LocalEmbeddings } from "./local-embeddings";
@@ -49,7 +50,7 @@ export async function ingest(): Promise<void> {
 }
 
 // Allow running directly: `npx tsx src/lib/rag/ingest.ts`
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   ingest()
     .then(() => process.exit(0))
     .catch((err) => {

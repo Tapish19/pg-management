@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { UtensilsCrossed, Check } from "lucide-react";
 import { getFoodMenu, updateFoodMenuDay } from "@/lib/api/functions/food-fns";
-import { listProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/food")({ component: FoodPage });
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_app/food")({ component: FoodPage });
 function FoodPage() {
   const { data: properties } = useQuery({
     queryKey: ["properties", "mine"],
-    queryFn: () => listProperties(),
+    queryFn: () => listOwnerProperties(),
   });
 
   return (
