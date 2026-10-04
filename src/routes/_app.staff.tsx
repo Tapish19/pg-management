@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
@@ -36,6 +36,8 @@ import {
   createStaff,
   updateStaffStatus,
   updateStaff,
+  listStaffAttendance,
+  recordStaffAttendance,
 } from "@/lib/api/functions/staff-fns";
 import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
@@ -48,6 +50,9 @@ function formatCurrency(n: number) {
 
 function StaffPage() {
   const [open, setOpen] = useState(false);
+  const [attendanceMember, setAttendanceMember] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [editing, setEditing] = useState<Awaited<ReturnType<typeof listOwnerStaff>>[number] | null>(
     null,
   );
@@ -111,7 +116,7 @@ function StaffPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Shift</TableHead>
                 <TableHead>Salary</TableHead>
-                <TableHead>Attendance</TableHead>
+                <TableHead>Attendance this month</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -152,13 +157,25 @@ function StaffPage() {
                     <TableCell className="capitalize">{s.role}</TableCell>
                     <TableCell className="capitalize">{s.shift}</TableCell>
                     <TableCell>{formatCurrency(s.salary)}</TableCell>
-                    <TableCell>{s.attendance}%</TableCell>
+                    <TableCell>
+                      {s.attendance === null
+                        ? "No records"
+                        : `${s.attendance}% · ${s.attendanceDays} days recorded`}
+                    </TableCell>
                     <TableCell>
                       <button onClick={() => toggleStatus(s.id, s.status)}>
                         <StatusPill tone={statusTone(s.status)}>{s.status}</StatusPill>
                       </button>
                     </TableCell>
                     <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mr-2"
+                        onClick={() => setAttendanceMember(s)}
+                      >
+                        Attendance
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
                         Edit
                       </Button>
@@ -170,6 +187,21 @@ function StaffPage() {
           </Table>
         </div>
       </Card>
+      <Dialog
+        open={!!attendanceMember}
+        onOpenChange={(value) => {
+          if (!value) setAttendanceMember(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Attendance: {attendanceMember?.name}</DialogTitle>
+          </DialogHeader>
+          {attendanceMember && (
+            <AttendanceForm key={attendanceMember.id} member={attendanceMember} />
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={!!editing}
         onOpenChange={(value) => {
@@ -195,6 +227,98 @@ function StaffPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function AttendanceForm({ member }: { member: { id: string; name: string } }) {
+  const queryClient = useQueryClient();
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [status, setStatus] = useState<"present" | "absent" | "on-leave">("present");
+  const [saving, setSaving] = useState(false);
+  const query = useQuery({
+    queryKey: ["staff-attendance", member.id],
+    queryFn: () => listStaffAttendance({ data: { staffId: member.id } }),
+  });
+  useEffect(() => {
+    setStatus((query.data?.find((row) => row.date === date)?.status as typeof status) ?? "present");
+  }, [query.data, date]);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await recordStaffAttendance({ data: { staffId: member.id, date, status } });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["staff-attendance", member.id] }),
+        queryClient.invalidateQueries({ queryKey: ["staff"] }),
+      ]);
+      toast.success("Attendance saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save attendance");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="space-y-4">
+      <form onSubmit={submit} className="space-y-3">
+        <Label htmlFor="attendance-date">Date</Label>
+        <Input
+          id="attendance-date"
+          type="date"
+          required
+          max={new Date().toISOString().slice(0, 10)}
+          value={date}
+          onChange={(e) => {
+            setDate(e.target.value);
+            const existing = query.data?.find((row) => row.date === e.target.value);
+            setStatus((existing?.status as typeof status) ?? "present");
+          }}
+        />
+        <Label>Status</Label>
+        <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="present">Present</SelectItem>
+            <SelectItem value="absent">Absent</SelectItem>
+            <SelectItem value="on-leave">On leave</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button disabled={saving || query.isLoading || query.isError} type="submit">
+          {saving ? "Saving…" : "Save attendance"}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Saving an existing date updates its record. Attendance is the percentage of recorded days
+          marked present, including leave days in the total.
+        </p>
+      </form>
+      {query.isLoading ? (
+        <p>Loading attendance…</p>
+      ) : query.isError ? (
+        <div role="alert">
+          Could not load attendance. <Button onClick={() => query.refetch()}>Retry</Button>
+        </div>
+      ) : (
+        <div className="max-h-48 overflow-y-auto space-y-2">
+          {!query.data?.length && (
+            <p className="text-sm text-muted-foreground">No attendance recorded yet.</p>
+          )}
+          {query.data?.map((row) => (
+            <button
+              key={row.date}
+              className="block w-full text-left rounded border p-2 text-sm"
+              onClick={() => {
+                setDate(row.date);
+                setStatus(row.status as typeof status);
+              }}
+            >
+              {row.date} · {row.status}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

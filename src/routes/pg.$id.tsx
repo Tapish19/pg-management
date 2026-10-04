@@ -1,44 +1,45 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { PROPERTIES, ROOMS, REVIEWS, FOOD_MENU, formatCurrency } from "@/lib/demo-data";
+import { getPublicProperty } from "@/lib/api/functions/public-fns";
+import { formatCurrency } from "@/lib/demo-data";
+import { hasVacantBed } from "@/lib/room-availability";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { StatusPill, statusTone } from "@/components/ui-ext/stat";
-import {
-  ArrowLeft,
-  MapPin,
-  Star,
-  Check,
-  Wifi,
-  UtensilsCrossed,
-  Snowflake,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, MapPin, Building2, Check } from "lucide-react";
 
 export const Route = createFileRoute("/pg/$id")({
-  loader: ({ params }) => {
-    const p = PROPERTIES.find((x) => x.id === params.id);
-    if (!p) throw notFound();
-    return { property: p };
+  loader: async ({ params }) => {
+    const detail = await getPublicProperty({ data: { id: params.id } });
+    if (!detail) throw notFound();
+    return detail;
   },
+  staleTime: 30_000,
   head: ({ loaderData }) => ({
     meta: loaderData
       ? [
           { title: `${loaderData.property.name} — PG One` },
           {
             name: "description",
-            content: `${loaderData.property.name} in ${loaderData.property.area}, ${loaderData.property.city}. From ${formatCurrency(loaderData.property.rentFrom)}/mo.`,
+            content: `${loaderData.property.name} in ${loaderData.property.area}, ${loaderData.property.city}. ${loaderData.property.availableBeds} beds available.`,
           },
-          { property: "og:image", content: loaderData.property.image },
+          ...(loaderData.property.image
+            ? [{ property: "og:image", content: loaderData.property.image }]
+            : []),
         ]
       : [{ title: "PG — PG One" }],
   }),
   component: PGDetail,
+  pendingComponent: () => <p className="p-10 text-center">Loading property…</p>,
+  errorComponent: ({ reset }) => (
+    <div className="p-10 text-center" role="alert">
+      Could not load this property. <Button onClick={reset}>Retry</Button>
+    </div>
+  ),
   notFoundComponent: () => (
     <div className="p-10 text-center">
-      <div className="text-lg font-semibold">PG not found</div>
-      <Button variant="outline" className="mt-4" asChild>
+      <h1 className="text-lg font-semibold">PG not found</h1>
+      <Button className="mt-4" variant="outline" asChild>
         <Link to="/browse">Back to browse</Link>
       </Button>
     </div>
@@ -46,9 +47,10 @@ export const Route = createFileRoute("/pg/$id")({
 });
 
 function PGDetail() {
-  const { property } = Route.useLoaderData();
-  const rooms = ROOMS.filter((r) => r.propertyId === property.id);
-
+  const { property, menu, contactEmail, noticePeriodDays } = Route.useLoaderData();
+  const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const sortedMenu = [...menu].sort((a, b) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day));
+  const enquiry = `mailto:${contactEmail}?subject=${encodeURIComponent(`Room enquiry: ${property.name}`)}`;
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background/80 backdrop-blur z-30">
@@ -61,73 +63,49 @@ function PGDetail() {
           </Button>
           <div className="flex-1" />
           <Button asChild>
-            <Link to="/book/$id" params={{ id: property.id }}>
-              Book a room
-            </Link>
+            <a href={enquiry}>Contact owner</a>
           </Button>
         </div>
       </header>
-
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
-        <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
-          <div className="aspect-[16/10] rounded-2xl overflow-hidden bg-muted">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+        <div className="aspect-[16/7] rounded-2xl overflow-hidden bg-muted">
+          {property.image ? (
             <img src={property.image} alt={property.name} className="h-full w-full object-cover" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="aspect-square rounded-xl overflow-hidden bg-muted">
-                <img
-                  src={property.image}
-                  alt=""
-                  className="h-full w-full object-cover opacity-90"
-                />
-              </div>
+          ) : (
+            <div className="h-full grid place-content-center text-muted-foreground">
+              <Building2 className="h-14 w-14 mx-auto mb-3" />
+              No photos added yet
+            </div>
+          )}
+        </div>
+        {property.images.length > 1 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+            {property.images.slice(1).map((image, index) => (
+              <img
+                key={`${image}:${index}`}
+                src={image}
+                alt={`${property.name} photo ${index + 2}`}
+                loading="lazy"
+                className="aspect-video w-full rounded-lg object-cover"
+              />
             ))}
           </div>
-        </div>
-
+        )}
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
           <div>
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">{property.name}</h1>
-                <div className="mt-1 text-sm text-muted-foreground inline-flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  {property.address}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-sm">
-                  <Star className="h-4 w-4 fill-warning text-warning" />
-                  {property.rating}
-                </span>
-                <span className="text-sm text-muted-foreground">({property.reviews} reviews)</span>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="secondary" className="capitalize">
-                {property.gender}
-              </Badge>
-              {property.food && (
-                <Badge variant="outline" className="gap-1">
-                  <UtensilsCrossed className="h-3 w-3" />
-                  Meals included
-                </Badge>
-              )}
-              {property.ac && (
-                <Badge variant="outline" className="gap-1">
-                  <Snowflake className="h-3 w-3" />
-                  AC rooms
-                </Badge>
-              )}
-              <Badge variant="outline" className="gap-1">
-                <ShieldCheck className="h-3 w-3" />
-                Verified
-              </Badge>
-            </div>
-
-            <Tabs defaultValue="rooms" className="mt-8">
-              <TabsList>
+            <h1 className="text-3xl font-bold">{property.name}</h1>
+            <p className="mt-2 text-sm text-muted-foreground flex items-center gap-1">
+              <MapPin className="h-4 w-4" />
+              {property.address} · {property.area}, {property.city}
+            </p>
+            <Badge variant="secondary" className="mt-3 capitalize">
+              {property.gender}
+            </Badge>
+            {property.description && (
+              <p className="mt-4 whitespace-pre-line text-sm">{property.description}</p>
+            )}
+            <Tabs defaultValue="rooms" className="mt-6">
+              <TabsList className="flex-wrap h-auto">
                 <TabsTrigger value="rooms">Rooms</TabsTrigger>
                 <TabsTrigger value="amenities">Amenities</TabsTrigger>
                 <TabsTrigger value="menu">Food menu</TabsTrigger>
@@ -136,140 +114,118 @@ function PGDetail() {
               </TabsList>
               <TabsContent value="rooms" className="mt-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {rooms.map((r) => (
-                    <Card key={r.id} className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">Room {r.number}</div>
-                        <StatusPill tone={statusTone(r.status)}>{r.status}</StatusPill>
+                  {!property.rooms.length && (
+                    <p className="text-sm text-muted-foreground">No rooms listed yet.</p>
+                  )}
+                  {property.rooms.map((room) => (
+                    <Card key={room.id} className="p-4">
+                      <div className="flex justify-between gap-2">
+                        <h2 className="font-semibold">Room {room.roomNumber}</h2>
+                        <Badge variant="outline">
+                          {room.status === "maintenance"
+                            ? "Maintenance"
+                            : hasVacantBed(room)
+                              ? "Available"
+                              : "Full"}
+                        </Badge>
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        Floor {r.floor} · {r.sharing}-sharing · {r.ac ? "AC" : "Non-AC"}
-                      </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <div>
-                          <div className="text-lg font-bold">{formatCurrency(r.rent)}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Deposit {formatCurrency(r.deposit)}
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.bedsTotal - r.bedsOccupied} beds free
-                        </div>
-                      </div>
+                      <p className="text-sm mt-2 capitalize">{room.sharingType} sharing</p>
+                      <p className="font-semibold mt-3">{formatCurrency(room.rentPerBed)}/month</p>
+                      <p className="text-xs text-muted-foreground">
+                        Deposit: {formatCurrency(room.depositAmount)}
+                      </p>
+                      <p className="text-sm mt-2">
+                        {hasVacantBed(room) ? room.totalBeds - room.occupiedBeds : 0} beds available
+                      </p>
+                      {room.amenities.length > 0 && (
+                        <p className="text-xs mt-2 text-muted-foreground">
+                          {room.amenities.join(" · ")}
+                        </p>
+                      )}
                     </Card>
                   ))}
                 </div>
               </TabsContent>
               <TabsContent value="amenities" className="mt-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {property.amenities.map((a: string) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {property.amenities.map((amenity, index) => (
                     <div
-                      key={a}
-                      className="rounded-lg border p-3 text-sm inline-flex items-center gap-2"
+                      key={`${amenity}:${index}`}
+                      className="rounded-lg border p-3 text-sm flex items-center gap-2"
                     >
                       <Check className="h-4 w-4 text-primary" />
-                      {a}
+                      {amenity}
                     </div>
                   ))}
                 </div>
+                {!property.amenities.length && (
+                  <p className="text-sm text-muted-foreground">No property amenities listed yet.</p>
+                )}
               </TabsContent>
               <TabsContent value="menu" className="mt-4">
-                <Card className="overflow-hidden">
+                <Card className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-muted/60 text-left">
+                    <thead>
                       <tr>
-                        <th className="p-3">Day</th>
-                        <th className="p-3">Breakfast</th>
-                        <th className="p-3">Lunch</th>
-                        <th className="p-3">Dinner</th>
+                        {["Day", "Breakfast", "Lunch", "Dinner"].map((label) => (
+                          <th key={label} className="p-3 text-left">
+                            {label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {FOOD_MENU.map((m) => (
-                        <tr key={m.day} className="border-t">
-                          <td className="p-3 font-medium">{m.day}</td>
-                          <td className="p-3 text-muted-foreground">{m.breakfast}</td>
-                          <td className="p-3 text-muted-foreground">{m.lunch}</td>
-                          <td className="p-3 text-muted-foreground">{m.dinner}</td>
+                      {sortedMenu.map((row) => (
+                        <tr key={row.day} className="border-t">
+                          <td className="p-3 font-medium">{row.day}</td>
+                          <td className="p-3">{row.breakfast || "Not set"}</td>
+                          <td className="p-3">{row.lunch || "Not set"}</td>
+                          <td className="p-3">{row.dinner || "Not set"}</td>
                         </tr>
                       ))}
+                      {!menu.length && (
+                        <tr>
+                          <td colSpan={4} className="p-6 text-muted-foreground">
+                            The owner has not added a food menu yet.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </Card>
               </TabsContent>
               <TabsContent value="rules" className="mt-4">
-                <ul className="space-y-2 text-sm">
-                  {[
-                    "Entry allowed till 11:00 PM",
-                    "No smoking or alcohol on premises",
-                    "Visitors allowed in common area only",
-                    "Rent due on 5th of every month",
-                    "30-day notice period before move-out",
-                  ].map((r) => (
-                    <li key={r} className="flex items-start gap-2">
-                      <Check className="h-4 w-4 mt-0.5 text-primary" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
+                <Card className="p-5">
+                  <p>Notice period: {noticePeriodDays} days.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Contact the owner for house rules and booking terms.
+                  </p>
+                </Card>
               </TabsContent>
-              <TabsContent value="reviews" className="mt-4 space-y-3">
-                {REVIEWS.map((r) => (
-                  <Card key={r.name} className="p-4">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium">{r.name}</div>
-                      <div className="flex text-warning">
-                        {Array.from({ length: r.rating }).map((_, i) => (
-                          <Star key={i} className="h-3.5 w-3.5 fill-warning" />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-2">"{r.text}"</p>
-                  </Card>
-                ))}
+              <TabsContent value="reviews" className="mt-4">
+                <p className="text-sm text-muted-foreground">
+                  Resident reviews are not available yet.
+                </p>
               </TabsContent>
             </Tabs>
-
-            <Card className="mt-6 aspect-[16/6] bg-muted grid place-items-center text-muted-foreground text-sm">
-              Map preview — {property.area}, {property.city}
-            </Card>
           </div>
-
-          <aside>
-            <Card className="p-5 sticky top-20">
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">
-                Starting from
-              </div>
-              <div className="mt-1 text-3xl font-bold">
-                {formatCurrency(property.rentFrom)}
-                <span className="text-sm text-muted-foreground font-normal">/mo</span>
-              </div>
-              <div className="mt-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Deposit</span>
-                  <span>1–2 months' rent</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Notice period</span>
-                  <span>30 days</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Available beds</span>
-                  <span>{property.beds - property.occupied}</span>
-                </div>
-              </div>
-              <Button className="w-full mt-5" asChild>
-                <Link to="/book/$id" params={{ id: property.id }}>
-                  Book a room
-                </Link>
-              </Button>
-              <p className="text-[11px] text-muted-foreground mt-2 text-center">
-                Free cancellation up to 24 hrs before move-in
-              </p>
-            </Card>
-          </aside>
+          <Card className="p-5 h-fit">
+            <h2 className="font-semibold">Availability</h2>
+            <p className="text-2xl font-bold mt-2">{property.availableBeds} beds free</p>
+            <p className="text-sm mt-2">
+              {property.rentFrom === null
+                ? "Rent has not been listed yet."
+                : `From ${formatCurrency(property.rentFrom)}/month`}
+            </p>
+            <p className="text-sm text-muted-foreground mt-3">
+              Ask the owner about room availability and request a booking.
+            </p>
+            <Button asChild className="w-full mt-4">
+              <a href={enquiry}>Enquire about a room</a>
+            </Button>
+          </Card>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

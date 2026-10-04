@@ -17,7 +17,11 @@ function requireSession() {
 // Owner: list bookings (+ tenant, property, room) across their properties
 export const listOwnerBookings = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireSession();
-  const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+  const ownerProperties = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.ownerId, session.ownerId))
+    .all();
   const propertyMap = new Map(ownerProperties.map((p) => [p.id, p]));
 
   const allBookings = await db.select().from(bookings).all();
@@ -40,7 +44,11 @@ export const listOwnerBookings = createServerFn({ method: "GET" }).handler(async
 // Owner: list distinct tenants across their properties (derived from bookings)
 export const listOwnerTenants = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireSession();
-  const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+  const ownerProperties = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.ownerId, session.ownerId))
+    .all();
   const propertyMap = new Map(ownerProperties.map((p) => [p.id, p]));
 
   const allBookings = await db.select().from(bookings).all();
@@ -76,31 +84,31 @@ export const createBooking = createServerFn({ method: "POST" })
           emergencyContact: z.string().optional(),
         }),
       })
-      .parse(input)
+      .parse(input),
   )
   .handler(async ({ data }) => {
-    const room = await db.select().from(rooms).where(eq(rooms.id, data.roomId)).get();
-    if (!room) throw new Error("Room not found");
-    if (!hasVacantBed(room)) throw new Error("Room has no available beds");
+    return db.transaction(async (tx) => {
+      const room = await tx.select().from(rooms).where(eq(rooms.id, data.roomId)).get();
+      if (!room) throw new Error("Room not found");
+      if (!hasVacantBed(room)) throw new Error("Room has no available beds");
 
-    const tenantId = genId("tenant");
-    await db.insert(tenants).values({ id: tenantId, ...data.tenant });
-    // TEMP DIAGNOSTIC — remove once tenant login is confirmed working.
-    console.log(`[diag] createBooking inserted tenant id=${tenantId} email="${data.tenant.email}" phone="${data.tenant.phone}"`);
+      const tenantId = genId("tenant");
+      await tx.insert(tenants).values({ id: tenantId, ...data.tenant });
 
-    const bookingId = genId("booking");
-    await db.insert(bookings).values({
-      id: bookingId,
-      roomId: data.roomId,
-      propertyId: room.propertyId,
-      tenantId,
-      checkInDate: data.checkInDate,
-      monthlyRent: room.rentPerBed,
-      depositAmount: room.depositAmount,
-      status: "pending",
+      const bookingId = genId("booking");
+      await tx.insert(bookings).values({
+        id: bookingId,
+        roomId: data.roomId,
+        propertyId: room.propertyId,
+        tenantId,
+        checkInDate: data.checkInDate,
+        monthlyRent: room.rentPerBed,
+        depositAmount: room.depositAmount,
+        status: "pending",
+      });
+
+      return { id: bookingId, monthlyRent: room.rentPerBed, depositAmount: room.depositAmount };
     });
-
-    return { id: bookingId, monthlyRent: room.rentPerBed, depositAmount: room.depositAmount };
   });
 
 // Owner: onboard a tenant directly (creates tenant + active booking, occupies a bed)
@@ -115,57 +123,74 @@ export const onboardTenant = createServerFn({ method: "POST" })
         moveIn: z.string(),
         kycStatus: z.enum(["verified", "pending", "missing"]).default("pending"),
       })
-      .parse(input)
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const session = requireSession();
-    const room = await db.select().from(rooms).where(eq(rooms.id, data.roomId)).get();
-    if (!room) throw new Error("Room not found");
-    const property = await db.select().from(properties).where(eq(properties.id, room.propertyId)).get();
-    if (!property || property.ownerId !== session.ownerId) throw new Error("Room not found");
-    if (!hasVacantBed(room)) throw new Error("Room has no available beds");
+    return db.transaction(async (tx) => {
+      const room = await tx.select().from(rooms).where(eq(rooms.id, data.roomId)).get();
+      if (!room) throw new Error("Room not found");
+      const property = await tx
+        .select()
+        .from(properties)
+        .where(eq(properties.id, room.propertyId))
+        .get();
+      if (!property || property.ownerId !== session.ownerId) throw new Error("Room not found");
+      if (!hasVacantBed(room)) throw new Error("Room has no available beds");
 
-    const tenantId = genId("tenant");
-    await db.insert(tenants).values({
-      id: tenantId,
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      kycStatus: data.kycStatus,
+      const tenantId = genId("tenant");
+      await tx.insert(tenants).values({
+        id: tenantId,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        kycStatus: data.kycStatus,
+      });
+
+      const bookingId = genId("booking");
+      await tx.insert(bookings).values({
+        id: bookingId,
+        roomId: data.roomId,
+        propertyId: room.propertyId,
+        tenantId,
+        checkInDate: data.moveIn,
+        monthlyRent: room.rentPerBed,
+        depositAmount: room.depositAmount,
+        status: "active",
+      });
+
+      const occupied = room.occupiedBeds + 1;
+      await tx
+        .update(rooms)
+        .set({ occupiedBeds: occupied, status: occupied >= room.totalBeds ? "full" : "available" })
+        .where(eq(rooms.id, room.id));
+
+      return { id: tenantId, bookingId };
     });
-
-    const bookingId = genId("booking");
-    await db.insert(bookings).values({
-      id: bookingId,
-      roomId: data.roomId,
-      propertyId: room.propertyId,
-      tenantId,
-      checkInDate: data.moveIn,
-      monthlyRent: room.rentPerBed,
-      depositAmount: room.depositAmount,
-      status: "active",
-    });
-
-    const occupied = room.occupiedBeds + 1;
-    await db
-      .update(rooms)
-      .set({ occupiedBeds: occupied, status: occupied >= room.totalBeds ? "full" : "available" })
-      .where(eq(rooms.id, room.id));
-
-    return { id: tenantId, bookingId };
   });
 
 // Owner: update a tenant's KYC status
 export const updateTenantKyc = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
-    z.object({ id: z.string(), kycStatus: z.enum(["verified", "pending", "missing"]) }).parse(input)
+    z
+      .object({ id: z.string(), kycStatus: z.enum(["verified", "pending", "missing"]) })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const session = requireSession();
-    const ownedProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+    const ownedProperties = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.ownerId, session.ownerId))
+      .all();
     const ownedIds = new Set(ownedProperties.map((p) => p.id));
-    const tenantBookings = await db.select().from(bookings).where(eq(bookings.tenantId, data.id)).all();
-    if (!tenantBookings.some((b) => ownedIds.has(b.propertyId))) throw new Error("Tenant not found");
+    const tenantBookings = await db
+      .select()
+      .from(bookings)
+      .where(eq(bookings.tenantId, data.id))
+      .all();
+    if (!tenantBookings.some((b) => ownedIds.has(b.propertyId)))
+      throw new Error("Tenant not found");
     await db.update(tenants).set({ kycStatus: data.kycStatus }).where(eq(tenants.id, data.id));
     return { ok: true };
   });
@@ -178,14 +203,18 @@ export const updateBookingStatus = createServerFn({ method: "POST" })
         id: z.string(),
         status: z.enum(["pending", "confirmed", "active", "checked_out", "cancelled"]),
       })
-      .parse(input)
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const session = requireSession();
     return db.transaction(async (tx) => {
       const booking = await tx.select().from(bookings).where(eq(bookings.id, data.id)).get();
       if (!booking) throw new Error("Not found");
-      const property = await tx.select().from(properties).where(eq(properties.id, booking.propertyId)).get();
+      const property = await tx
+        .select()
+        .from(properties)
+        .where(eq(properties.id, booking.propertyId))
+        .get();
       if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
       const room = await tx.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();

@@ -71,9 +71,11 @@ async function rpc(name, method, data, cookie = ownerCookie("owner-a")) {
     data === undefined
       ? undefined
       : JSON.stringify(await toJSONAsync({ data }, { plugins: defaultSerovalPlugins }));
-  const response = await fetch(`${base}/_serverFn/${match[1]}`, {
+  const endpoint = new URL(`${base}/_serverFn/${match[1]}`);
+  if (method === "GET" && body) endpoint.searchParams.set("payload", body);
+  const response = await fetch(endpoint, {
     method,
-    body,
+    body: method === "POST" ? body : undefined,
     headers: {
       cookie,
       origin: base,
@@ -116,7 +118,7 @@ try {
   client = createClient({ url: `file:${databaseFile}` });
   assert.equal(
     (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
-    2,
+    JSON.parse(fs.readFileSync("drizzle/meta/_journal.json", "utf8")).entries.length,
   );
   for (const id of ["owner-a", "owner-b"])
     await client.execute({
@@ -232,8 +234,121 @@ try {
   });
   assert.equal((await rpc("getOwnerNotifications", "GET")).length, 0);
   await assert.rejects(rpc("getOwnerSettings", "GET", undefined, ""));
+  await rpc("recordStaffAttendance", "POST", {
+    staffId: "staff-a",
+    date: today,
+    status: "present",
+  });
+  await rpc("recordStaffAttendance", "POST", { staffId: "staff-a", date: today, status: "absent" });
+  const attendance = await rpc("listStaffAttendance", "GET", { staffId: "staff-a" });
+  assert.equal(attendance.length, 1);
+  assert.equal(attendance[0].status, "absent");
+  const staffList = await rpc("listOwnerStaff", "GET");
+  assert.equal(staffList.find((member) => member.id === "staff-a").attendance, 0);
+  await assert.rejects(
+    rpc("recordStaffAttendance", "POST", { staffId: "staff-b", date: today, status: "present" }),
+  );
+  await assert.rejects(
+    rpc("listStaffAttendance", "GET", { staffId: "staff-a" }, ownerCookie("owner-b")),
+  );
+  await assert.rejects(
+    rpc("recordStaffAttendance", "POST", {
+      staffId: "staff-a",
+      date: "2999-01-01",
+      status: "present",
+    }),
+  );
+  await assert.rejects(
+    rpc("recordStaffAttendance", "POST", {
+      staffId: "staff-a",
+      date: "2026-02-30",
+      status: "present",
+    }),
+  );
+  await client.execute(
+    "INSERT INTO rooms (id,property_id,room_number,sharing_type,total_beds,occupied_beds,rent_per_bed) VALUES ('onboard-room','property-a','102','single',1,0,8000)",
+  );
+  const before = (await client.execute("SELECT count(*) AS count FROM tenants")).rows[0].count;
+  await client.execute(
+    "CREATE TRIGGER reject_onboarding BEFORE UPDATE ON rooms WHEN NEW.id = 'onboard-room' BEGIN SELECT RAISE(ABORT, 'Simulated room update failure'); END",
+  );
+  const onboarding = {
+    roomId: "onboard-room",
+    name: "New tenant",
+    email: "new@example.com",
+    phone: "7777777777",
+    moveIn: today,
+    kycStatus: "pending",
+  };
+  await assert.rejects(rpc("onboardTenant", "POST", onboarding));
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM tenants")).rows[0].count,
+    before,
+  );
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM bookings WHERE room_id = 'onboard-room'"))
+      .rows[0].count,
+    0,
+  );
+  await client.execute("DROP TRIGGER reject_onboarding");
+  const outcomes = await Promise.allSettled([
+    rpc("onboardTenant", "POST", onboarding),
+    rpc("onboardTenant", "POST", { ...onboarding, email: "second@example.com" }),
+  ]);
+  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM tenants")).rows[0].count,
+    Number(before) + 1,
+  );
+  assert.equal(
+    (await client.execute("SELECT occupied_beds FROM rooms WHERE id = 'onboard-room'")).rows[0]
+      .occupied_beds,
+    1,
+  );
+  await client.execute(
+    "CREATE TRIGGER reject_booking BEFORE INSERT ON bookings WHEN NEW.room_id = 'room-b' BEGIN SELECT RAISE(ABORT, 'Simulated booking failure'); END",
+  );
+  const beforePublic = (await client.execute("SELECT count(*) AS count FROM tenants")).rows[0]
+    .count;
+  await assert.rejects(
+    rpc(
+      "createBooking",
+      "POST",
+      {
+        roomId: "room-b",
+        checkInDate: today,
+        tenant: { name: "Public tenant", email: "public@example.com", phone: "6666666666" },
+      },
+      "",
+    ),
+  );
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM tenants")).rows[0].count,
+    beforePublic,
+  );
+  await client.execute("DROP TRIGGER reject_booking");
+  await client.execute(
+    "INSERT INTO food_menu (id,property_id,day,breakfast,lunch,dinner) VALUES ('menu-live','property-a','Monday','Idli','Rice','Dosa')",
+  );
+  const publicProperties = await rpc("listPublicProperties", "GET", undefined, "");
+  assert.equal(publicProperties.length, 2);
+  assert.ok(publicProperties.some((property) => property.name === "Edited property"));
+  assert.ok(!JSON.stringify(publicProperties).includes("password_hash"));
+  const publicDetail = await rpc("getPublicProperty", "GET", { id: "property-a" }, "");
+  assert.equal(publicDetail.menu[0].breakfast, "Idli");
+  assert.equal(publicDetail.contactEmail, "contact@example.com");
+  assert.equal(publicDetail.property.availableBeds, 0);
+  assert.equal(await rpc("getPublicProperty", "GET", { id: "missing" }, ""), null);
+  const page = await fetch(`${base}/pg/property-a`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes("Edited property"));
+  assert.ok(html.includes("Contact owner"));
+  assert.ok(!html.includes("/book/property-a"));
+  assert.ok(!html.includes("private-proof-number"));
+  assert.equal((await fetch(`${base}/pg/missing`)).status, 404);
   console.log(
-    "Production smoke passed: startup migrations, settings persistence, owner isolation, property/room/staff edits, resident KYC, rent policies and live notifications.",
+    "Production smoke passed: migrations, owner isolation, saved settings, edits, KYC, notifications, attendance, atomic onboarding and public listing/detail pages.",
   );
 } catch (error) {
   console.error(error);

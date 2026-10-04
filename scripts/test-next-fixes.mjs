@@ -8,6 +8,110 @@ import { spawnSync } from "node:child_process";
 import { createClient } from "@libsql/client";
 import { migrateEmbedded } from "../src/lib/api/db/migrate-embedded.ts";
 import { currentRentCollection } from "../src/lib/collection-rate.ts";
+import { cosineSimilarity, rankRelevantDocuments } from "../src/lib/rag/relevance.ts";
+import {
+  publicListing,
+  filterPublicListings,
+  parseStringArray,
+} from "../src/lib/public-listings.ts";
+import { attendanceSummary, isCalendarDate } from "../src/lib/staff-attendance.ts";
+
+test("assistant relevance ranks matching text above unrelated and opposite vectors", () => {
+  const result = rankRelevantDocuments(
+    [1, 0],
+    ["opposite", "relevant", "unrelated"],
+    [
+      [-1, 0],
+      [20, 0],
+      [0, 1],
+    ],
+    0.45,
+  );
+  assert.deepEqual(result, { topScore: 1, documents: ["relevant"] });
+  assert.equal(cosineSimilarity([3, 4], [30, 40]), 1);
+});
+test("malformed and missing assistant vectors cannot pass the confidence gate", () => {
+  for (const vector of [[], [0, 0], [NaN, 1], [Infinity, 1], [1]])
+    assert.equal(cosineSimilarity([1, 0], vector), 0);
+  assert.deepEqual(rankRelevantDocuments([1, 0], ["unknown"], [], 0.45), {
+    topScore: 0,
+    documents: [],
+  });
+});
+test("attendance counts only this month's recorded days and handles no records", () => {
+  assert.deepEqual(attendanceSummary([], "2026-10"), { percentage: null, days: 0 });
+  assert.deepEqual(
+    attendanceSummary(
+      [
+        { date: "2026-10-01", status: "present" },
+        { date: "2026-10-02", status: "absent" },
+        { date: "2026-10-03", status: "on-leave" },
+        { date: "2026-09-30", status: "present" },
+      ],
+      "2026-10",
+    ),
+    { percentage: 33, days: 3 },
+  );
+  assert.equal(isCalendarDate("2026-02-29"), false);
+  assert.equal(isCalendarDate("2028-02-29"), true);
+  assert.equal(isCalendarDate("2026-04-31"), false);
+});
+const listingProperty = {
+  id: "live",
+  name: "Live PG",
+  city: "Bengaluru",
+  locality: "HSR",
+  address: "Real address",
+  description: null,
+  genderType: "co-ed",
+  amenities: '["WiFi"]',
+  images: null,
+};
+const availableRoom = {
+  id: "room",
+  roomNumber: "101",
+  sharingType: "double",
+  totalBeds: 2,
+  occupiedBeds: 1,
+  rentPerBed: 9000,
+  depositAmount: 5000,
+  status: "available",
+  amenities: '["AC"]',
+};
+test("public availability excludes maintenance rooms and derives actual amenities", () => {
+  const property = publicListing(listingProperty, [
+    availableRoom,
+    {
+      ...availableRoom,
+      id: "maintenance",
+      status: "maintenance",
+      rentPerBed: 1000,
+      occupiedBeds: 0,
+    },
+  ]);
+  assert.equal(property.availableBeds, 1);
+  assert.equal(property.rentFrom, 9000);
+  assert.equal(property.ac, true);
+  assert.equal(property.wifi, true);
+  assert.equal(property.food, false);
+  assert.equal(property.image, undefined);
+  assert.deepEqual(parseStringArray("invalid"), []);
+  assert.deepEqual(parseStringArray('["WiFi",1,null]'), ["WiFi"]);
+});
+test("browse matches sharing and budget against the same available room", () => {
+  const property = publicListing(listingProperty, [
+    availableRoom,
+    { ...availableRoom, id: "single", sharingType: "single", rentPerBed: 5000, occupiedBeds: 2 },
+  ]);
+  const filters = { q: " hSr ", gender: "co-ed", food: false, ac: true, budget: 10000, sharing: 2 };
+  assert.deepEqual(
+    filterPublicListings([property], filters).map((row) => row.id),
+    ["live"],
+  );
+  assert.equal(filterPublicListings([property], { ...filters, sharing: 1 }).length, 0);
+  assert.equal(filterPublicListings([property], { ...filters, budget: 8000 }).length, 0);
+  assert.equal(filterPublicListings([property], { ...filters, food: true }).length, 0);
+});
 import { buildOwnerNotifications } from "../src/lib/owner-notifications.ts";
 import {
   defaultNotificationPreferences,
@@ -65,7 +169,7 @@ test("fresh database applies every bundled migration once", async (t) => {
     await migrateEmbedded(client, migrations, snapshot);
     assert.equal(
       (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
-      2,
+      migrations.length,
     );
     assert.ok(
       (await client.execute("PRAGMA table_info(owner_settings)")).rows.some(
@@ -94,7 +198,7 @@ test("startup adopts an unmanaged database without losing its existing owner", a
     );
     assert.equal(
       (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
-      2,
+      migrations.length,
     );
   } finally {
     client.close();
@@ -122,7 +226,7 @@ test("failed migration rolls back and can be retried", async (t) => {
     await assert.rejects(
       migrateEmbedded(
         client,
-        [...migrations, { sql: "INVALID SQL", when: migrations[1].when + 1 }],
+        [...migrations, { sql: "INVALID SQL", when: migrations.at(-1).when + 1 }],
         snapshot,
       ),
     );
@@ -134,7 +238,7 @@ test("failed migration rolls back and can be retried", async (t) => {
     await migrateEmbedded(client, migrations, snapshot);
     assert.equal(
       (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
-      2,
+      migrations.length,
     );
   } finally {
     client.close();

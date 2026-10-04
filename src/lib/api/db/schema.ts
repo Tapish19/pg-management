@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // PG Owners / Admins (multi-tenant: each owner manages their own PG properties)
@@ -107,6 +107,18 @@ export const staff = sqliteTable("staff", {
 });
 
 // Maintenance / service complaints raised by tenants
+export const staffAttendance = sqliteTable(
+  "staff_attendance",
+  {
+    staffId: text("staff_id")
+      .notNull()
+      .references(() => staff.id),
+    date: text("date").notNull(),
+    status: text("status").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.staffId, table.date] })],
+);
+
 export const complaints = sqliteTable("complaints", {
   id: text("id").primaryKey(),
   propertyId: text("property_id")

@@ -13,9 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROPERTIES, ROOMS, formatCurrency } from "@/lib/demo-data";
+import { formatCurrency } from "@/lib/demo-data";
+import { useQuery } from "@tanstack/react-query";
+import { listPublicProperties } from "@/lib/api/functions/public-fns";
+import { filterPublicListings } from "@/lib/public-listings";
 import { parseBrowseSearch } from "@/lib/search-filters";
-import { MapPin, Search, Star, Wifi, UtensilsCrossed, Snowflake, ArrowLeft } from "lucide-react";
+import {
+  MapPin,
+  Search,
+  Building2,
+  Wifi,
+  UtensilsCrossed,
+  Snowflake,
+  ArrowLeft,
+} from "lucide-react";
 
 export const Route = createFileRoute("/browse")({
   validateSearch: parseBrowseSearch,
@@ -24,7 +35,8 @@ export const Route = createFileRoute("/browse")({
       { title: "Browse PGs — PG One" },
       {
         name: "description",
-        content: "Search and filter verified PGs by city, budget, sharing, food and amenities.",
+        content:
+          "Search and filter available PG rooms by city, budget, sharing, food and amenities.",
       },
     ],
   }),
@@ -32,30 +44,35 @@ export const Route = createFileRoute("/browse")({
 });
 
 function Browse() {
+  const query = useQuery({
+    queryKey: ["public-properties"],
+    queryFn: () => listPublicProperties(),
+    staleTime: 30_000,
+  });
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const q = search.q ?? "";
   const sharing = search.sharing;
-  const setQ = (value: string) => navigate({ search: (previous) => ({ ...previous, q: value }), replace: true });
+  const setQ = (value: string) =>
+    navigate({ search: (previous) => ({ ...previous, q: value }), replace: true });
   const [gender, setGender] = useState<string>("any");
   const [food, setFood] = useState(false);
   const [ac, setAc] = useState(false);
   const maxBudget = [search.budget ?? 15000];
-  const setMaxBudget = (value: number[]) => navigate({ search: (previous) => ({ ...previous, budget: value[0] }), replace: true });
+  const setMaxBudget = (value: number[]) =>
+    navigate({ search: (previous) => ({ ...previous, budget: value[0] }), replace: true });
 
   const results = useMemo(
     () =>
-      PROPERTIES.filter((p) => {
-        if (q && !`${p.name} ${p.area} ${p.city}`.toLowerCase().includes(q.toLowerCase()))
-          return false;
-        if (gender !== "any" && p.gender !== gender) return false;
-        if (food && !p.food) return false;
-        if (ac && !p.ac) return false;
-        if (p.rentFrom > maxBudget[0]) return false;
-        if (sharing && !ROOMS.some((room) => room.propertyId === p.id && room.sharing === sharing && room.rent <= maxBudget[0])) return false;
-        return true;
+      filterPublicListings(query.data ?? [], {
+        q,
+        gender,
+        food,
+        ac,
+        budget: maxBudget[0],
+        sharing,
       }),
-    [q, gender, food, ac, maxBudget[0], sharing],
+    [query.data, q, gender, food, ac, maxBudget[0], sharing],
   );
 
   return (
@@ -117,11 +134,28 @@ function Browse() {
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2">Sharing</div>
-                <Select value={sharing ? String(sharing) : "any"} onValueChange={(value) => navigate({ search: (previous) => ({ ...previous, sharing: value === "any" ? undefined : Number(value) }), replace: true })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={sharing ? String(sharing) : "any"}
+                  onValueChange={(value) =>
+                    navigate({
+                      search: (previous) => ({
+                        ...previous,
+                        sharing: value === "any" ? undefined : Number(value),
+                      }),
+                      replace: true,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="any">Any</SelectItem>
-                    {[1, 2, 3, 4].map((value) => <SelectItem key={value} value={String(value)}>{value}-sharing</SelectItem>)}
+                    {[1, 2, 3, 4].map((value) => (
+                      <SelectItem key={value} value={String(value)}>
+                        {value}-sharing
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -142,16 +176,26 @@ function Browse() {
             <div className="text-sm text-muted-foreground">{results.length} properties found</div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            {query.isLoading && <p>Loading properties…</p>}
+            {query.isError && (
+              <Card className="p-6" role="alert">
+                Could not load properties. <Button onClick={() => query.refetch()}>Retry</Button>
+              </Card>
+            )}
             {results.map((p) => (
               <Link key={p.id} to="/pg/$id" params={{ id: p.id }}>
                 <Card className="overflow-hidden pt-0 h-full transition hover:shadow-elegant">
                   <div className="aspect-video overflow-hidden bg-muted">
-                    <img
-                      src={p.image}
-                      alt={p.name}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
+                    {p.image ? (
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Building2 className="h-full w-full p-10 text-muted-foreground/40" />
+                    )}
                   </div>
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -161,10 +205,6 @@ function Browse() {
                           <MapPin className="h-3 w-3" /> {p.area}, {p.city}
                         </div>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-xs shrink-0">
-                        <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                        {p.rating}
-                      </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       <Badge variant="secondary" className="capitalize">
@@ -182,17 +222,23 @@ function Browse() {
                           AC
                         </Badge>
                       )}
-                      <Badge variant="outline" className="gap-1">
-                        <Wifi className="h-3 w-3" />
-                        WiFi
-                      </Badge>
+                      {p.wifi && (
+                        <Badge variant="outline" className="gap-1">
+                          <Wifi className="h-3 w-3" />
+                          WiFi
+                        </Badge>
+                      )}
                     </div>
                     <div className="mt-4 flex items-center justify-between">
                       <div className="text-sm">
-                        From <span className="font-semibold">{formatCurrency(p.rentFrom)}</span>/mo
+                        From{" "}
+                        <span className="font-semibold">
+                          {p.rentFrom === null ? "Not listed" : formatCurrency(p.rentFrom)}
+                        </span>
+                        /mo
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {p.beds - p.occupied} beds free
+                        {p.availableBeds} beds free
                       </div>
                     </div>
                   </div>
@@ -200,7 +246,7 @@ function Browse() {
               </Link>
             ))}
           </div>
-          {results.length === 0 && (
+          {!query.isLoading && !query.isError && results.length === 0 && (
             <Card className="p-10 text-center text-muted-foreground">
               No properties match those filters. Try widening your budget or clearing filters.
             </Card>

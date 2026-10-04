@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { staff, properties } from "../db/schema";
+import { staff, properties, staffAttendance } from "../db/schema";
+import { attendanceSummary, isCalendarDate } from "../../staff-attendance";
 import { genId } from "../id";
 import { getSession } from "../auth";
 
@@ -22,7 +23,17 @@ export const listOwnerStaff = createServerFn({ method: "GET" }).handler(async ()
     .all();
   const propertyIds = new Set(ownerProperties.map((p) => p.id));
   const all = await db.select().from(staff).all();
-  return all.filter((s) => propertyIds.has(s.propertyId));
+  const records = await db.select().from(staffAttendance).all();
+  const month = new Date().toISOString().slice(0, 7);
+  return all
+    .filter((s) => propertyIds.has(s.propertyId))
+    .map((member) => {
+      const summary = attendanceSummary(
+        records.filter((record) => record.staffId === member.id),
+        month,
+      );
+      return { ...member, attendance: summary.percentage, attendanceDays: summary.days };
+    });
 });
 
 const staffInput = z.object({
@@ -86,6 +97,52 @@ export const updateStaff = createServerFn({ method: "POST" })
     if (!property || property.ownerId !== session.ownerId)
       throw new Error("Staff member not found");
     await db.update(staff).set(details).where(eq(staff.id, id));
+    return { ok: true };
+  });
+
+async function requireOwnedStaff(id: string) {
+  const session = requireSession();
+  const member = await db.select().from(staff).where(eq(staff.id, id)).get();
+  if (!member) throw new Error("Staff member not found");
+  const property = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.id, member.propertyId))
+    .get();
+  if (!property || property.ownerId !== session.ownerId) throw new Error("Staff member not found");
+  return member;
+}
+
+export const listStaffAttendance = createServerFn({ method: "GET" })
+  .validator((input: unknown) => z.object({ staffId: z.string() }).parse(input))
+  .handler(async ({ data }) => {
+    await requireOwnedStaff(data.staffId);
+    return (
+      await db.select().from(staffAttendance).where(eq(staffAttendance.staffId, data.staffId)).all()
+    ).sort((a, b) => b.date.localeCompare(a.date));
+  });
+
+export const recordStaffAttendance = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    z
+      .object({
+        staffId: z.string(),
+        date: z.string().refine(isCalendarDate, "Choose a valid date"),
+        status: z.enum(["present", "absent", "on-leave"]),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    await requireOwnedStaff(data.staffId);
+    if (data.date > new Date().toISOString().slice(0, 10))
+      throw new Error("Attendance cannot be recorded for a future date");
+    await db
+      .insert(staffAttendance)
+      .values(data)
+      .onConflictDoUpdate({
+        target: [staffAttendance.staffId, staffAttendance.date],
+        set: { status: data.status },
+      });
     return { ok: true };
   });
 

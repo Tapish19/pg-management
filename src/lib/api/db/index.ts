@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrateEmbedded } from "./migrate-embedded";
 import initialSql from "../../../../drizzle/0000_violet_manta.sql?raw";
 import settingsSql from "../../../../drizzle/0001_owner_settings.sql?raw";
+import attendanceSql from "../../../../drizzle/0002_staff_attendance.sql?raw";
 import initialSnapshot from "../../../../drizzle/meta/0000_snapshot.json";
 import journal from "../../../../drizzle/meta/_journal.json";
 import { createClient } from "@libsql/client";
@@ -40,6 +41,7 @@ export function ensureMigrated(): Promise<void> {
       [
         { sql: initialSql, when: journal.entries[0].when },
         { sql: settingsSql, when: journal.entries[1].when },
+        { sql: attendanceSql, when: journal.entries[2].when },
       ],
       initialSnapshot,
     ).catch((err) => {

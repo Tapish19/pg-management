@@ -27,7 +27,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { PROPERTIES, REVIEWS, FAQS, formatCurrency } from "@/lib/demo-data";
+import { REVIEWS, FAQS, formatCurrency } from "@/lib/demo-data";
+import { useQuery } from "@tanstack/react-query";
+import { listPublicProperties } from "@/lib/api/functions/public-fns";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -107,31 +109,56 @@ function Hero() {
             </span>
           </h1>
           <p className="mt-5 text-lg text-muted-foreground max-w-2xl">
-            Every listing here comes with a real room, a real rent number and a real key tag —
-            no brokers, no "call for price." Owners run the whole PG — rent, staff, food,
-            complaints — from the same place.
+            Every listing here comes with a real room, a real rent number and a real key tag — no
+            brokers, no "call for price." Owners run the whole PG — rent, staff, food, complaints —
+            from the same place.
           </p>
         </div>
         <Card className="ticket-edge mt-10 p-4 sm:p-5 border-dashed">
-          <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={(event) => {
-            event.preventDefault();
-            navigate({ to: "/browse", search: parseBrowseSearch({ q, sharing, budget }) });
-          }}>
+          <form
+            className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              navigate({ to: "/browse", search: parseBrowseSearch({ q, sharing, budget }) });
+            }}
+          >
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={q} onChange={(event) => setQ(event.target.value)} className="pl-9" placeholder="City or area (e.g. HSR Layout)" />
+              <Input
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                className="pl-9"
+                placeholder="City or area (e.g. HSR Layout)"
+              />
             </div>
             <div className="relative">
               <BedDouble className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input type="number" min={1} max={4} step={1} value={sharing} onChange={(event) => setSharing(event.target.value)} className="pl-9" placeholder="Sharing type (1, 2, 3, 4)" />
+              <Input
+                type="number"
+                min={1}
+                max={4}
+                step={1}
+                value={sharing}
+                onChange={(event) => setSharing(event.target.value)}
+                className="pl-9"
+                placeholder="Sharing type (1, 2, 3, 4)"
+              />
             </div>
             <div className="relative">
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input type="number" min={0} max={1000000} value={budget} onChange={(event) => setBudget(event.target.value)} className="pl-9" placeholder="Budget (max ₹)" />
+              <Input
+                type="number"
+                min={0}
+                max={1000000}
+                value={budget}
+                onChange={(event) => setBudget(event.target.value)}
+                className="pl-9"
+                placeholder="Budget (max ₹)"
+              />
             </div>
             <Button type="submit" size="lg" className="gap-2">
-                <Search className="h-4 w-4" />
-                Search
+              <Search className="h-4 w-4" />
+              Search
             </Button>
           </form>
         </Card>
@@ -149,6 +176,11 @@ function Hero() {
 }
 
 function Featured() {
+  const query = useQuery({
+    queryKey: ["public-properties"],
+    queryFn: () => listPublicProperties(),
+    staleTime: 30_000,
+  });
   return (
     <section className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
       <div className="flex items-end justify-between mb-8">
@@ -156,7 +188,7 @@ function Featured() {
           <h2 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight">
             Featured PGs
           </h2>
-          <p className="text-muted-foreground mt-1">Handpicked properties with the best reviews.</p>
+          <p className="text-muted-foreground mt-1">Explore PGs and their current availability.</p>
         </div>
         <Link
           to="/browse"
@@ -166,27 +198,37 @@ function Featured() {
         </Link>
       </div>
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {PROPERTIES.map((p) => (
+        {query.isLoading && <p>Loading properties…</p>}
+        {query.isError && (
+          <div role="alert">
+            Could not load properties. <Button onClick={() => query.refetch()}>Retry</Button>
+          </div>
+        )}
+        {!query.isLoading && !query.isError && !query.data?.length && (
+          <p className="text-muted-foreground">No properties listed yet.</p>
+        )}
+        {(query.data ?? []).slice(0, 4).map((p) => (
           <Link key={p.id} to="/pg/$id" params={{ id: p.id }} className="group">
             <Card className="overflow-hidden pt-0 h-full transition-shadow hover:shadow-elegant">
               <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-                <img
-                  src={p.image}
-                  alt={p.name}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                />
+                {p.image ? (
+                  <img
+                    src={p.image}
+                    alt={p.name}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                ) : (
+                  <Building2 className="h-full w-full p-12 text-muted-foreground/40" />
+                )}
                 <div className="keytag keytag--filled absolute top-3 left-3">
-                  {formatCurrency(p.rentFrom)}/mo
+                  {p.rentFrom === null ? "Rates coming soon" : `${formatCurrency(p.rentFrom)}/mo`}
                 </div>
               </div>
               <div className="p-4">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-semibold truncate">{p.name}</h3>
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                    {p.rating}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{p.availableBeds} beds free</span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5 truncate">
                   {p.area}, {p.city}
@@ -345,7 +387,9 @@ function Contact() {
   return (
     <section id="contact" className="mx-auto max-w-7xl px-4 sm:px-6 py-16">
       <Card className="p-8 sm:p-12 bg-gradient-to-br from-primary/15 via-accent/40 to-background text-center">
-        <h2 className="font-display text-3xl font-semibold tracking-tight">List your PG on PG One</h2>
+        <h2 className="font-display text-3xl font-semibold tracking-tight">
+          List your PG on PG One
+        </h2>
         <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
           Join hundreds of owners running smoother operations. Setup takes under 10 minutes.
         </p>
