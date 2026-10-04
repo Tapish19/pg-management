@@ -247,6 +247,26 @@ try {
     args: ["booking-a", "room-a", "property-a", "resident", today, 10000, "active"],
   });
   const settings = await rpc("getOwnerSettings", "GET");
+  const lifestyle = {
+    sleepSchedule: "early_bird",
+    cleanliness: 4,
+    noiseTolerance: 3,
+    socialLevel: 3,
+    foodHabit: "veg",
+    smoking: false,
+    guestsFrequency: "rare",
+    workSchedule: "office",
+  };
+  await rpc("saveMyPreferences", "POST", lifestyle, residentCookie);
+  assert.equal(
+    (await rpc("getMyPreferences", "GET", undefined, residentCookie)).sleepSchedule,
+    "early_bird",
+  );
+  assert.equal(
+    (await rpc("getMyRoommateMatches", "GET", undefined, residentCookie)).matches.length,
+    0,
+  );
+  assert.ok((await rpc("getOwnerRoomMatches", "GET")).some((item) => item.room.id === "room-a"));
   assert.equal(settings.organizationName, "owner-a");
   await rpc("updateOwnerSettings", "POST", {
     section: "organization",

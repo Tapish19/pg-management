@@ -133,6 +133,17 @@ try {
     await page.waitForFunction(() =>
       document.querySelector("form input")?.value.endsWith("Demo Profile"),
     );
+    if (role === "tenant") {
+      const roommateText = await page.getByText(/% compatible$/).innerText();
+      await page.getByLabel("Sleep schedule", { exact: true }).selectOption("night_owl");
+      await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+      await page.getByText("Preferences saved and matches recalculated", { exact: true }).waitFor();
+      assert.notEqual(await page.getByText(/% compatible$/).innerText(), roommateText);
+      await page.reload();
+      await page.waitForFunction(
+        () => document.querySelector("#prefs-sleepSchedule")?.value === "night_owl",
+      );
+    }
     if (role === "admin") {
       await page.goto(`${base}/settings`);
       await page

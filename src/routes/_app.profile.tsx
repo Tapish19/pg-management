@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getMyKyc } from "@/lib/demo-api";
+import { RoommatePreferences } from "@/components/roommate-preferences";
 
 export const Route = createFileRoute("/_app/profile")({ component: ProfilePage });
 
@@ -141,6 +142,7 @@ function ProfilePage() {
           )}
         </Card>
       </div>
+      {resident && <RoommatePreferences />}
     </>
   );
 }

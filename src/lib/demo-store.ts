@@ -5,6 +5,11 @@ import { currentRentCollection } from "./collection-rate";
 import { noticeVisibleToRoom } from "./notice-audience";
 import { attendanceSummary } from "./staff-attendance";
 import { z } from "zod";
+import {
+  computeCompatibility,
+  preferencesInput,
+  type LifestylePreferences,
+} from "./roommate-compatibility";
 import { buildOwnerNotifications } from "./owner-notifications";
 import { defaultNotificationPreferences, parseNotificationPreferences } from "./owner-settings";
 
@@ -218,10 +223,30 @@ function freshState(): State {
 }
 function read(): State {
   const raw = localStorage.getItem(DATA_KEY);
-  if (raw) return JSON.parse(raw) as State;
+  if (raw) {
+    const state = JSON.parse(raw) as State;
+    seedPreferences(state);
+    return state;
+  }
   const state = freshState();
+  seedPreferences(state);
   localStorage.setItem(DATA_KEY, JSON.stringify(state));
   return state;
+}
+// Deterministic, varied sample surveys. Preserve all preferences edited by users.
+function seedPreferences(state: State) {
+  state.tenants.forEach((tenant, i) => {
+    state.preferences[tenant.id] ??= {
+      sleepSchedule: ["early_bird", "night_owl", "flexible"][i % 3],
+      cleanliness: 2 + (i % 4),
+      noiseTolerance: 1 + (i % 5),
+      socialLevel: 1 + ((i * 2) % 5),
+      foodHabit: ["veg", "eggetarian", "nonveg", "vegan"][i % 4],
+      smoking: i % 5 === 3,
+      guestsFrequency: ["rare", "occasional", "frequent"][i % 3],
+      workSchedule: ["office", "wfh", "student", "night_shift"][i % 4],
+    };
+  });
 }
 export function demoProfile(role: D.Role): D.DemoUser {
   return read().profiles[role];
@@ -283,17 +308,11 @@ export function demoCall(name: string, input: unknown = {}): unknown {
     localStorage.setItem(DATA_KEY, JSON.stringify(s));
     return result;
   };
-  const preferences = {
-    sleepSchedule: "early_bird",
-    cleanliness: 4,
-    noiseTolerance: 3,
-    socialLevel: 3,
-    foodHabit: "veg",
-    smoking: false,
-    guestsFrequency: "occasional",
-    workSchedule: "office",
-    ...(s.preferences[user.id] ?? {}),
+  const preferenceFor = (tenantId: string) => {
+    const saved = preferencesInput.safeParse(s.preferences[tenantId]);
+    return saved.success ? saved.data : null;
   };
+  const preferences = preferenceFor(user.id);
   switch (name) {
     case "getTaskComments":
       return s.comments[text("id")] ?? [];
@@ -461,7 +480,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
     case "getMyPreferences":
       return { ...preferences, id: `prefs-${user.id}`, tenantId: user.id, updatedAt: timestamp() };
     case "saveMyPreferences":
-      s.preferences[user.id] = data;
+      s.preferences[user.id] = preferencesInput.parse(data);
       return save({ id: `prefs-${user.id}` });
     case "getMyRoommateMatches":
       return {
@@ -469,32 +488,69 @@ export function demoCall(name: string, input: unknown = {}): unknown {
         matches: s.bookings
           .filter(
             (b) =>
-              b.roomId === myBooking().roomId && b.tenantId !== user.id && b.status === "active",
+              b.roomId === myBooking().roomId &&
+              b.tenantId !== user.id &&
+              ["active", "confirmed"].includes(b.status),
           )
           .map((b) => ({
             tenant: s.tenants.find((t) => t.id === b.tenantId),
-            score: 82,
-            breakdown: [{ label: "Demo lifestyle match", score: 82, weight: 1 }],
+            ...(preferences && preferenceFor(b.tenantId)
+              ? computeCompatibility(preferences, preferenceFor(b.tenantId)!)
+              : { score: null, breakdown: [] }),
           })),
       };
     case "getOwnerRoomMatches":
       return s.rooms
-        .filter(hasVacantBed)
-        .map((r) => ({
-          room: {
-            id: r.id,
-            roomNumber: r.roomNumber,
-            sharingType: r.sharingType,
-            vacantBeds: r.totalBeds - r.occupiedBeds,
-          },
-          propertyName: property(r.propertyId).name,
-          occupants: s.bookings
-            .filter((b) => b.roomId === r.id && ["active", "confirmed"].includes(b.status))
-            .map((b) => ({ tenant: s.tenants.find((t) => t.id === b.tenantId), hasPrefs: true })),
-          suggestedCandidates: s.bookings
-            .filter((b) => b.status === "pending")
-            .map((b) => ({ tenant: s.tenants.find((t) => t.id === b.tenantId), score: 82 })),
-        }));
+        .filter((r) => hasVacantBed(r) && r.sharingType !== "single")
+        .map((r) => {
+          const occupants = s.bookings.filter(
+            (b) => b.roomId === r.id && ["active", "confirmed"].includes(b.status),
+          );
+          const surveys = occupants
+            .map((b) => preferenceFor(b.tenantId))
+            .filter((p): p is LifestylePreferences => p !== null);
+          const assigned = new Set(
+            s.bookings
+              .filter((b) => ["active", "confirmed"].includes(b.status))
+              .map((b) => b.tenantId),
+          );
+          const candidates = [
+            ...new Set(
+              s.bookings
+                .filter((b) => b.status === "pending" && !assigned.has(b.tenantId))
+                .map((b) => b.tenantId),
+            ),
+          ];
+          return {
+            room: {
+              id: r.id,
+              roomNumber: r.roomNumber,
+              sharingType: r.sharingType,
+              vacantBeds: r.totalBeds - r.occupiedBeds,
+            },
+            propertyName: property(r.propertyId).name,
+            occupants: occupants.map((b) => ({
+              tenant: s.tenants.find((t) => t.id === b.tenantId),
+              hasPrefs: preferenceFor(b.tenantId) !== null,
+            })),
+            suggestedCandidates: candidates
+              .filter((tenantId) => preferenceFor(tenantId))
+              .map((tenantId) => ({
+                tenant: s.tenants.find((t) => t.id === tenantId),
+                score: surveys.length
+                  ? Math.round(
+                      surveys.reduce(
+                        (sum, survey) =>
+                          sum + computeCompatibility(preferenceFor(tenantId)!, survey).score,
+                        0,
+                      ) / surveys.length,
+                    )
+                  : null,
+              }))
+              .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+              .slice(0, 5),
+          };
+        });
     case "listTenantRiskScores":
       return s.bookings.map((b, i) => ({
         tenantId: b.tenantId,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { computeCompatibility, preferencesInput } from "../src/lib/roommate-compatibility";
 import {
   demoCall,
   demoProfile,
@@ -52,6 +53,70 @@ demoCall("updateFoodMenuDay", {
   lunch: "Dal",
   dinner: "Rice",
 });
+role("tenant");
+const basePreferences = preferencesInput.parse({
+  sleepSchedule: "early_bird",
+  cleanliness: 4,
+  noiseTolerance: 3,
+  socialLevel: 3,
+  foodHabit: "veg",
+  smoking: false,
+  guestsFrequency: "rare",
+  workSchedule: "office",
+});
+assert.equal(computeCompatibility(basePreferences, basePreferences).score, 100);
+assert.equal(
+  computeCompatibility(basePreferences, { ...basePreferences, sleepSchedule: "night_owl" }).score,
+  80,
+);
+assert.equal(
+  computeCompatibility(basePreferences, { ...basePreferences, sleepSchedule: "flexible" }).score,
+  90,
+);
+const beforeMatch = demoCall("getMyRoommateMatches") as {
+  matches: { score: number; breakdown: unknown[] }[];
+};
+assert.equal(beforeMatch.matches[0].breakdown.length, 8);
+const state = JSON.parse(values.get("pgone.demo.data.v1")!);
+const roommatePrefs = state.preferences.t2;
+demoCall("saveMyPreferences", roommatePrefs);
+assert.equal(
+  (demoCall("getMyRoommateMatches") as { matches: { score: number }[] }).matches[0].score,
+  100,
+);
+assert.notEqual(beforeMatch.matches[0].score, 100);
+assert.throws(() => demoCall("saveMyPreferences", { ...roommatePrefs, cleanliness: 6 }));
+assert.equal(
+  (demoCall("getMyPreferences") as { cleanliness: number }).cleanliness,
+  roommatePrefs.cleanliness,
+);
+role("admin");
+const fixture = JSON.parse(values.get("pgone.demo.data.v1")!);
+const candidateId = fixture.bookings.find(
+  (b: { status: string }) => b.status === "pending",
+).tenantId;
+fixture.preferences[candidateId] = fixture.preferences.t3;
+values.set("pgone.demo.data.v1", JSON.stringify(fixture));
+const roomMatches = demoCall("getOwnerRoomMatches") as {
+  room: { id: string; sharingType: string };
+  suggestedCandidates: { tenant: { id: string }; score: number | null }[];
+}[];
+assert.ok(roomMatches.every((r) => r.room.sharingType !== "single" && r.room.id !== "r-203"));
+assert.equal(
+  roomMatches
+    .find((r) => r.room.id === "r-201")!
+    .suggestedCandidates.find((c) => c.tenant.id === candidateId)!.score,
+  100,
+);
+assert.ok(roomMatches.some((r) => r.suggestedCandidates.some((c) => c.score === null)));
+for (const match of roomMatches) {
+  assert.ok(match.suggestedCandidates.length <= 5);
+  assert.ok(
+    match.suggestedCandidates.every(
+      (c, i, all) => i === 0 || (all[i - 1].score ?? -1) >= (c.score ?? -1),
+    ),
+  );
+}
 role("tenant");
 for (const name of [
   "getMyComplaints",

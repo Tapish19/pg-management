@@ -1,3 +1,5 @@
+import { computeCompatibility, preferencesInput } from "../../roommate-compatibility";
+export { computeCompatibility } from "../../roommate-compatibility";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { eq, inArray } from "drizzle-orm";
@@ -32,104 +34,18 @@ export type Preferences = typeof tenantPreferences.$inferSelect;
 // filtering recommenders, just transparent enough to explain to a tenant.
 // ---------------------------------------------------------------------------
 
-const WEIGHTS = {
-  sleepSchedule: 0.2,
-  cleanliness: 0.2,
-  noiseTolerance: 0.15,
-  socialLevel: 0.1,
-  foodHabit: 0.15,
-  smoking: 0.1,
-  guestsFrequency: 0.05,
-  workSchedule: 0.05,
-} as const;
-
-function numericFit(a: number, b: number, range = 4) {
-  // 1 = identical, 0 = maximally far apart on a 1-5 scale (range = 5-1 = 4)
-  return 1 - Math.abs(a - b) / range;
-}
-
-function categoricalFit(a: string, b: string, partialMatches: Record<string, string[]> = {}) {
-  if (a === b) return 1;
-  const partners = partialMatches[a] || [];
-  if (partners.includes(b)) return 0.5;
-  return 0;
-}
-
-const SLEEP_PARTIAL: Record<string, string[]> = {
-  early_bird: ["flexible"],
-  night_owl: ["flexible"],
-  flexible: ["early_bird", "night_owl"],
-};
-
-const FOOD_PARTIAL: Record<string, string[]> = {
-  veg: ["eggetarian", "vegan"],
-  vegan: ["veg"],
-  eggetarian: ["veg", "nonveg"],
-  nonveg: ["eggetarian"],
-};
-
-const GUEST_PARTIAL: Record<string, string[]> = {
-  rare: ["occasional"],
-  occasional: ["rare", "frequent"],
-  frequent: ["occasional"],
-};
-
-const WORK_PARTIAL: Record<string, string[]> = {
-  wfh: ["student"],
-  student: ["wfh"],
-  office: ["student"],
-  night_shift: [],
-};
-
-export interface CompatibilityBreakdown {
-  feature: string;
-  fit: number; // 0-1
-  weight: number;
-}
-
-export interface CompatibilityResult {
-  score: number; // 0-100
-  breakdown: CompatibilityBreakdown[];
-}
-
-export function computeCompatibility(a: Preferences, b: Preferences): CompatibilityResult {
-  const breakdown: CompatibilityBreakdown[] = [
-    { feature: "Sleep schedule", fit: categoricalFit(a.sleepSchedule, b.sleepSchedule, SLEEP_PARTIAL), weight: WEIGHTS.sleepSchedule },
-    { feature: "Cleanliness", fit: numericFit(a.cleanliness, b.cleanliness), weight: WEIGHTS.cleanliness },
-    { feature: "Noise tolerance", fit: numericFit(a.noiseTolerance, b.noiseTolerance), weight: WEIGHTS.noiseTolerance },
-    { feature: "Social level", fit: numericFit(a.socialLevel, b.socialLevel), weight: WEIGHTS.socialLevel },
-    { feature: "Food habit", fit: categoricalFit(a.foodHabit, b.foodHabit, FOOD_PARTIAL), weight: WEIGHTS.foodHabit },
-    { feature: "Smoking", fit: a.smoking === b.smoking ? 1 : 0, weight: WEIGHTS.smoking },
-    { feature: "Guests frequency", fit: categoricalFit(a.guestsFrequency, b.guestsFrequency, GUEST_PARTIAL), weight: WEIGHTS.guestsFrequency },
-    { feature: "Work schedule", fit: categoricalFit(a.workSchedule, b.workSchedule, WORK_PARTIAL), weight: WEIGHTS.workSchedule },
-  ];
-
-  const raw = breakdown.reduce((sum, b) => sum + b.fit * b.weight, 0);
-  const totalWeight = breakdown.reduce((sum, b) => sum + b.weight, 0);
-  const score = Math.round((raw / totalWeight) * 100);
-
-  return { score, breakdown };
-}
-
 // ---------------------------------------------------------------------------
 // Tenant-facing: manage my own preferences
 // ---------------------------------------------------------------------------
 
 export const getMyPreferences = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireTenantSession();
-  const row = await db.select().from(tenantPreferences).where(eq(tenantPreferences.tenantId, session.tenantId)).get();
+  const row = await db
+    .select()
+    .from(tenantPreferences)
+    .where(eq(tenantPreferences.tenantId, session.tenantId))
+    .get();
   return row ?? null;
-});
-
-const preferencesInput = z.object({
-  sleepSchedule: z.enum(["early_bird", "night_owl", "flexible"]),
-  cleanliness: z.number().int().min(1).max(5),
-  noiseTolerance: z.number().int().min(1).max(5),
-  socialLevel: z.number().int().min(1).max(5),
-  foodHabit: z.enum(["veg", "nonveg", "vegan", "eggetarian"]),
-  smoking: z.boolean(),
-  guestsFrequency: z.enum(["rare", "occasional", "frequent"]),
-  workSchedule: z.enum(["wfh", "office", "student", "night_shift"]),
 });
 
 export const saveMyPreferences = createServerFn({ method: "POST" })
@@ -159,7 +75,11 @@ export const saveMyPreferences = createServerFn({ method: "POST" })
 export const getMyRoommateMatches = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireTenantSession();
 
-  const myPrefs = await db.select().from(tenantPreferences).where(eq(tenantPreferences.tenantId, session.tenantId)).get();
+  const myPrefs = await db
+    .select()
+    .from(tenantPreferences)
+    .where(eq(tenantPreferences.tenantId, session.tenantId))
+    .get();
   if (!myPrefs) return { myPrefs: null, matches: [] };
 
   const myBooking = await db
@@ -175,12 +95,21 @@ export const getMyRoommateMatches = createServerFn({ method: "GET" }).handler(as
     .from(bookings)
     .where(eq(bookings.roomId, myBooking.roomId))
     .all()
-    .then((rows) => rows.filter((r) => r.tenantId !== session.tenantId && (r.status === "active" || r.status === "confirmed")));
+    .then((rows) =>
+      rows.filter(
+        (r) =>
+          r.tenantId !== session.tenantId && (r.status === "active" || r.status === "confirmed"),
+      ),
+    );
 
   if (roommateBookings.length === 0) return { myPrefs, matches: [] };
 
   const roommateTenantIds = roommateBookings.map((r) => r.tenantId);
-  const roommates = await db.select().from(tenants).where(inArray(tenants.id, roommateTenantIds)).all();
+  const roommates = await db
+    .select()
+    .from(tenants)
+    .where(inArray(tenants.id, roommateTenantIds))
+    .all();
   const roommatePrefs = await db
     .select()
     .from(tenantPreferences)
@@ -206,16 +135,30 @@ export const getMyRoommateMatches = createServerFn({ method: "GET" }).handler(as
 export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireOwnerSession();
 
-  const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+  const ownerProperties = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.ownerId, session.ownerId))
+    .all();
   const propertyIds = ownerProperties.map((p) => p.id);
   if (propertyIds.length === 0) return [];
 
-  const allRooms = await db.select().from(rooms).where(inArray(rooms.propertyId, propertyIds)).all();
+  const allRooms = await db
+    .select()
+    .from(rooms)
+    .where(inArray(rooms.propertyId, propertyIds))
+    .all();
   const vacantRooms = allRooms.filter((r) => hasVacantBed(r) && r.sharingType !== "single");
   if (vacantRooms.length === 0) return [];
 
-  const allBookings = await db.select().from(bookings).where(inArray(bookings.propertyId, propertyIds)).all();
-  const activeBookings = allBookings.filter((b) => b.status === "active" || b.status === "confirmed");
+  const allBookings = await db
+    .select()
+    .from(bookings)
+    .where(inArray(bookings.propertyId, propertyIds))
+    .all();
+  const activeBookings = allBookings.filter(
+    (b) => b.status === "active" || b.status === "confirmed",
+  );
 
   const allTenants = await db.select().from(tenants).all();
   const tenantMap = new Map(allTenants.map((t) => [t.id, t]));
@@ -226,8 +169,12 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
   // Tenants who have a booking but no roommate assignment yet (or are otherwise
   // unassigned) and have filled out preferences are candidates for matching.
   const bookedTenantIds = new Set(activeBookings.map((b) => b.tenantId));
-  const candidateIds = new Set(allBookings.filter((b) => b.status === "pending").map((b) => b.tenantId));
-  const unassignedWithPrefs = allPrefs.filter((p) => candidateIds.has(p.tenantId) && !bookedTenantIds.has(p.tenantId));
+  const candidateIds = new Set(
+    allBookings.filter((b) => b.status === "pending").map((b) => b.tenantId),
+  );
+  const unassignedWithPrefs = allPrefs.filter(
+    (p) => candidateIds.has(p.tenantId) && !bookedTenantIds.has(p.tenantId),
+  );
 
   return vacantRooms.map((room) => {
     const occupantBookings = activeBookings.filter((b) => b.roomId === room.id);
@@ -237,9 +184,14 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
         const prefs = prefsByTenant.get(b.tenantId);
         return tenant ? { tenant: { id: tenant.id, name: tenant.name }, prefs } : null;
       })
-      .filter((o): o is { tenant: { id: string; name: string }; prefs: Preferences | undefined } => !!o);
+      .filter(
+        (o): o is { tenant: { id: string; name: string }; prefs: Preferences | undefined } => !!o,
+      );
 
-    const occupantsWithPrefs = occupants.filter((o) => o.prefs) as { tenant: { id: string; name: string }; prefs: Preferences }[];
+    const occupantsWithPrefs = occupants.filter((o) => o.prefs) as {
+      tenant: { id: string; name: string };
+      prefs: Preferences;
+    }[];
 
     const candidates = unassignedWithPrefs
       .map((candidatePrefs) => {
@@ -248,7 +200,9 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
         if (occupantsWithPrefs.length === 0) {
           return { tenant: { id: tenant.id, name: tenant.name }, score: null as number | null };
         }
-        const scores = occupantsWithPrefs.map((o) => computeCompatibility(candidatePrefs, o.prefs).score);
+        const scores = occupantsWithPrefs.map(
+          (o) => computeCompatibility(candidatePrefs, o.prefs).score,
+        );
         const avgScore = Math.round(scores.reduce((s, v) => s + v, 0) / scores.length);
         return { tenant: { id: tenant.id, name: tenant.name }, score: avgScore };
       })
@@ -259,7 +213,12 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
     const property = ownerProperties.find((p) => p.id === room.propertyId);
 
     return {
-      room: { id: room.id, roomNumber: room.roomNumber, sharingType: room.sharingType, vacantBeds: room.totalBeds - room.occupiedBeds },
+      room: {
+        id: room.id,
+        roomNumber: room.roomNumber,
+        sharingType: room.sharingType,
+        vacantBeds: room.totalBeds - room.occupiedBeds,
+      },
       propertyName: property?.name ?? "",
       occupants: occupants.map((o) => ({ tenant: o.tenant, hasPrefs: !!o.prefs })),
       suggestedCandidates: candidates,
