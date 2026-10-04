@@ -3,21 +3,12 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { ensureMigrated } from "./lib/api/db";
+import { createStartHandler, defaultRenderHandler } from "@tanstack/react-start/server";
 
-type ServerEntry = {
-  fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
-};
-
-let serverEntryPromise: Promise<ServerEntry> | undefined;
-
-async function getServerEntry(): Promise<ServerEntry> {
-  if (!serverEntryPromise) {
-    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => (m.default ?? m) as ServerEntry,
-    );
-  }
-  return serverEntryPromise;
-}
+// All route loaders resolve before rendering; this app has no deferred SSR data.
+// Render complete HTML and release router state immediately, even when a health
+// check or disconnected client never consumes the response body.
+const handleRequest = createStartHandler(defaultRenderHandler);
 
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
@@ -46,11 +37,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 }
 
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, options?: Parameters<typeof handleRequest>[1]) {
     try {
       await ensureMigrated();
-      const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      const response = await handleRequest(request, options);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

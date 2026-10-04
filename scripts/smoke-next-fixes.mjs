@@ -133,8 +133,9 @@ try {
   for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) throw new Error(serverLog);
     try {
-      const response = await fetch(base);
+      const response = await fetch(base, { signal: AbortSignal.timeout(15000) });
       if (response.status === 200) {
+        assert.ok((await response.text()).includes("</html>"));
         ready = true;
         break;
       }
@@ -145,6 +146,17 @@ try {
     }
   }
   assert.ok(ready, `Production server starts: ${serverLog}`);
+  for (const pathname of ["/", "/browse", "/auth", "/dashboard", "/settings"]) {
+    const response = await fetch(`${base}${pathname}`, { signal: AbortSignal.timeout(15000) });
+    assert.equal(response.status, 200, pathname);
+    assert.ok((await response.text()).includes("</html>"), `${pathname} response completes`);
+    const head = await fetch(`${base}${pathname}`, {
+      method: "HEAD",
+      signal: AbortSignal.timeout(15000),
+    });
+    assert.equal(head.status, 200, `${pathname} HEAD`);
+    assert.equal(await head.text(), "");
+  }
   client = createClient({ url: `file:${databaseFile}` });
   if (process.argv.includes("--preexisting-settings"))
     assert.equal(
@@ -418,14 +430,17 @@ try {
   assert.equal(publicDetail.contactEmail, "contact@example.com");
   assert.equal(publicDetail.property.availableBeds, 0);
   assert.equal(await rpc("getPublicProperty", "GET", { id: "missing" }, ""), null);
-  const page = await fetch(`${base}/pg/property-a`);
+  const page = await fetch(`${base}/pg/property-a`, { signal: AbortSignal.timeout(15000) });
   assert.equal(page.status, 200);
   const html = await page.text();
   assert.ok(html.includes("Edited property"));
   assert.ok(html.includes("Contact owner"));
   assert.ok(!html.includes("/book/property-a"));
   assert.ok(!html.includes("private-proof-number"));
-  assert.equal((await fetch(`${base}/pg/missing`)).status, 404);
+  const missingPage = await fetch(`${base}/pg/missing`, { signal: AbortSignal.timeout(15000) });
+  assert.equal(missingPage.status, 404);
+  assert.ok((await missingPage.text()).includes("</html>"));
+  assert.ok(!serverLog.includes("SSR stream transform exceeded"));
   console.log(
     "Production smoke passed: migrations, owner isolation, saved settings, edits, KYC, notifications, attendance, atomic onboarding and public listing/detail pages.",
   );
