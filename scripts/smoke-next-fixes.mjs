@@ -159,6 +159,46 @@ try {
     (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
     JSON.parse(fs.readFileSync("drizzle/meta/_journal.json", "utf8")).entries.length,
   );
+  await client.execute(
+    "INSERT INTO owners (id,name,email,password_hash) VALUES ('sample-owner','Sample Owner','sample@example.invalid','unused')",
+  );
+  await assert.rejects(rpc("loadSampleData", "POST", undefined, ""), /sign in/i);
+  assert.deepEqual(await rpc("loadSampleData", "POST", undefined, ownerCookie("sample-owner")), {
+    properties: 3,
+    rooms: 18,
+    tenants: 18,
+    staff: 12,
+  });
+  await assert.rejects(
+    rpc("loadSampleData", "POST", undefined, ownerCookie("sample-owner")),
+    /empty accounts only/,
+  );
+  assert.equal(
+    (await rpc("listOwnerProperties", "GET", undefined, ownerCookie("sample-owner"))).length,
+    3,
+  );
+  const sampleReports = await rpc("getOwnerReports", "GET", undefined, ownerCookie("sample-owner"));
+  assert.equal(sampleReports.revenueTrend.length, 6);
+  assert.ok(sampleReports.totalRevenue > 0);
+  assert.equal((await rpc("listOwnerProperties", "GET")).length, 0);
+  // Remove this fixture before the original listing-count assertions below.
+  for (const table of [
+    "staff_attendance",
+    "tenant_preferences",
+    "payments",
+    "complaints",
+    "visitors",
+    "notices",
+    "expenses",
+    "food_menu",
+    "services",
+    "bookings",
+    "staff",
+    "rooms",
+    "properties",
+    "tenants",
+  ])
+    await client.execute(`DELETE FROM ${table}`);
   for (const id of ["owner-a", "owner-b"])
     await client.execute({
       sql: "INSERT INTO owners (id,name,email,password_hash) VALUES (?,?,?,?)",

@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { getOwnerSettings, updateOwnerSettings } from "@/lib/api/functions/settings-fns";
 import { toast } from "sonner";
+import { SampleDataCard } from "@/components/sample-data-card";
 import type { NotificationPreferences } from "@/lib/owner-settings";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
@@ -82,6 +83,7 @@ function SettingsEditor({ initial }: { initial: Awaited<ReturnType<typeof getOwn
   return (
     <>
       <PageHeader title="Settings" description="Organization, payments, notifications & roles." />
+      <SampleDataCard />
       <Tabs defaultValue="org">
         <TabsList>
           <TabsTrigger value="org">Organization</TabsTrigger>

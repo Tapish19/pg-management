@@ -44,7 +44,12 @@ import { listOwnerStaff } from "@/lib/api/functions/staff-fns";
 import { listOwnerComplaints } from "@/lib/api/functions/complaints-fns";
 import { listOwnerVisitors } from "@/lib/api/functions/visitors-fns";
 import { getFoodMenu } from "@/lib/api/functions/food-fns";
-import { getMyBooking, getMyComplaints, getMyPayments, getMyNotices } from "@/lib/api/functions/tenant-fns";
+import {
+  getMyBooking,
+  getMyComplaints,
+  getMyPayments,
+  getMyNotices,
+} from "@/lib/api/functions/tenant-fns";
 import {
   Area,
   AreaChart,
@@ -63,6 +68,7 @@ import {
   YAxis,
 } from "recharts";
 import { Link } from "@tanstack/react-router";
+import { SampleDataCard } from "@/components/sample-data-card";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
@@ -78,17 +84,29 @@ function Dashboard() {
 
 // ---------- ADMIN ----------
 function AdminDashboard() {
-  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listOwnerProperties() });
-  const { data: tenantRows } = useQuery({ queryKey: ["tenants", "mine"], queryFn: () => listOwnerTenants() });
-  const { data: bookings } = useQuery({ queryKey: ["bookings", "mine"], queryFn: () => listOwnerBookings() });
-  const { data: staffList } = useQuery({ queryKey: ["staff", "mine"], queryFn: () => listOwnerStaff() });
-  const { data: complaints } = useQuery({ queryKey: ["complaints", "mine"], queryFn: () => listOwnerComplaints() });
+  const { data: properties } = useQuery({
+    queryKey: ["properties", "mine"],
+    queryFn: () => listOwnerProperties(),
+  });
+  const { data: tenantRows } = useQuery({
+    queryKey: ["tenants", "mine"],
+    queryFn: () => listOwnerTenants(),
+  });
+  const { data: bookings } = useQuery({
+    queryKey: ["bookings", "mine"],
+    queryFn: () => listOwnerBookings(),
+  });
+  const { data: staffList } = useQuery({
+    queryKey: ["staff", "mine"],
+    queryFn: () => listOwnerStaff(),
+  });
+  const { data: complaints } = useQuery({
+    queryKey: ["complaints", "mine"],
+    queryFn: () => listOwnerComplaints(),
+  });
 
   const totalBeds = (properties || []).reduce((s, p) => s + (p.totalBeds ?? 0), 0);
-  const occupied = (properties || []).reduce(
-    (s, p) => s + p.occupiedBeds,
-    0,
-  );
+  const occupied = (properties || []).reduce((s, p) => s + p.occupiedBeds, 0);
   const activeTenants = (tenantRows || []).filter((r) => r.booking.status === "active").length;
   const monthlyRevenue = (bookings || [])
     .filter((b) => b.status === "active" || b.status === "confirmed")
@@ -103,29 +121,26 @@ function AdminDashboard() {
       <PageHeader
         title="Overview"
         description="Live snapshot across all your properties."
-        actions={<Button size="sm" asChild><Link to="/properties">+ Add property</Link></Button>}
+        actions={
+          <Button size="sm" asChild>
+            <Link to="/properties">+ Add property</Link>
+          </Button>
+        }
       />
 
+      {properties?.length === 0 && <SampleDataCard />}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Properties"
-          value={properties?.length ?? 0}
-          icon={Building2}
-          tone="info"
-        />
+        <StatCard label="Properties" value={properties?.length ?? 0} icon={Building2} tone="info" />
         <StatCard
           label="Beds"
           value={`${occupied} / ${totalBeds}`}
-          hint={totalBeds ? `${Math.round((occupied / totalBeds) * 100)}% occupied` : "No rooms yet"}
+          hint={
+            totalBeds ? `${Math.round((occupied / totalBeds) * 100)}% occupied` : "No rooms yet"
+          }
           icon={BedDouble}
           tone="success"
         />
-        <StatCard
-          label="Active tenants"
-          value={activeTenants}
-          icon={Users}
-          tone="default"
-        />
+        <StatCard label="Active tenants" value={activeTenants} icon={Users} tone="default" />
         <StatCard
           label="Monthly rent value"
           value={formatCurrency(monthlyRevenue)}
@@ -135,7 +150,11 @@ function AdminDashboard() {
         <StatCard
           label="Staff"
           value={staffList?.length ?? 0}
-          hint={staffList ? `${staffList.filter((s) => s.status === "active").length} on duty` : undefined}
+          hint={
+            staffList
+              ? `${staffList.filter((s) => s.status === "active").length} on duty`
+              : undefined
+          }
           icon={UserCog}
         />
         <StatCard
@@ -188,8 +207,20 @@ function AdminDashboard() {
                 formatter={(v) => formatCurrency(Number(v))}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line isAnimationActive={false} type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2} />
-              <Line isAnimationActive={false} type="monotone" dataKey="expense" stroke="#dc2626" strokeWidth={2} />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="revenue"
+                stroke="#059669"
+                strokeWidth={2}
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="expense"
+                stroke="#dc2626"
+                strokeWidth={2}
+              />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -207,9 +238,19 @@ function AdminDashboard() {
         <ChartCard title="Food plan usage" subtitle="Active subscriptions">
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
-              <Pie isAnimationActive={false} data={FOOD_PLAN_USAGE} dataKey="count" nameKey="plan" outerRadius={90} label>
+              <Pie
+                isAnimationActive={false}
+                data={FOOD_PLAN_USAGE}
+                dataKey="count"
+                nameKey="plan"
+                outerRadius={90}
+                label
+              >
                 {FOOD_PLAN_USAGE.map((_, i) => (
-                  <Cell key={i} fill={["#059669","#2563eb","#d97706","#dc2626","#7c3aed"][i % 5]} />
+                  <Cell
+                    key={i}
+                    fill={["#059669", "#2563eb", "#d97706", "#dc2626", "#7c3aed"][i % 5]}
+                  />
                 ))}
               </Pie>
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
@@ -299,9 +340,18 @@ function ChartCard({
 // ---------- STAFF ----------
 function StaffDashboard() {
   const { user } = useAuth();
-  const { data: complaints } = useQuery({ queryKey: ["complaints", "mine"], queryFn: () => listOwnerComplaints() });
-  const { data: visitors } = useQuery({ queryKey: ["visitors", "mine"], queryFn: () => listOwnerVisitors() });
-  const { data: properties } = useQuery({ queryKey: ["properties", "mine"], queryFn: () => listOwnerProperties() });
+  const { data: complaints } = useQuery({
+    queryKey: ["complaints", "mine"],
+    queryFn: () => listOwnerComplaints(),
+  });
+  const { data: visitors } = useQuery({
+    queryKey: ["visitors", "mine"],
+    queryFn: () => listOwnerVisitors(),
+  });
+  const { data: properties } = useQuery({
+    queryKey: ["properties", "mine"],
+    queryFn: () => listOwnerProperties(),
+  });
   const firstPropertyId = properties?.[0]?.id;
   const { data: menu } = useQuery({
     queryKey: ["food-menu", firstPropertyId],
@@ -312,8 +362,7 @@ function StaffDashboard() {
   const tasks = (complaints || []).filter((c) => c.status !== "resolved" && c.status !== "closed");
   const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const todaysMenu = (menu || []).find((m) => m.day === today) as
-    | { breakfast: string; lunch: string; dinner: string }
-    | undefined;
+    { breakfast: string; lunch: string; dinner: string } | undefined;
 
   return (
     <>
@@ -364,13 +413,16 @@ function StaffDashboard() {
           {todaysMenu ? (
             <div className="text-sm space-y-2">
               <div>
-                <span className="text-muted-foreground">Breakfast:</span> {todaysMenu.breakfast || "Not set"}
+                <span className="text-muted-foreground">Breakfast:</span>{" "}
+                {todaysMenu.breakfast || "Not set"}
               </div>
               <div>
-                <span className="text-muted-foreground">Lunch:</span> {todaysMenu.lunch || "Not set"}
+                <span className="text-muted-foreground">Lunch:</span>{" "}
+                {todaysMenu.lunch || "Not set"}
               </div>
               <div>
-                <span className="text-muted-foreground">Dinner:</span> {todaysMenu.dinner || "Not set"}
+                <span className="text-muted-foreground">Dinner:</span>{" "}
+                {todaysMenu.dinner || "Not set"}
               </div>
             </div>
           ) : (
@@ -389,11 +441,19 @@ function StaffDashboard() {
 function TenantDashboard() {
   const { user } = useAuth();
   const { data: booking } = useQuery({ queryKey: ["my-booking"], queryFn: () => getMyBooking() });
-  const { data: complaints } = useQuery({ queryKey: ["my-complaints"], queryFn: () => getMyComplaints() });
-  const { data: myPayments } = useQuery({ queryKey: ["my-payments"], queryFn: () => getMyPayments() });
+  const { data: complaints } = useQuery({
+    queryKey: ["my-complaints"],
+    queryFn: () => getMyComplaints(),
+  });
+  const { data: myPayments } = useQuery({
+    queryKey: ["my-payments"],
+    queryFn: () => getMyPayments(),
+  });
   const { data: notices } = useQuery({ queryKey: ["my-notices"], queryFn: () => getMyNotices() });
 
-  const openComplaints = (complaints || []).filter((c) => c.status !== "resolved" && c.status !== "closed");
+  const openComplaints = (complaints || []).filter(
+    (c) => c.status !== "resolved" && c.status !== "closed",
+  );
   const firstName = user?.name?.split(" ")[0] || "there";
 
   return (
@@ -411,12 +471,16 @@ function TenantDashboard() {
         <Card className="p-5 lg:col-span-2 bg-gradient-to-br from-primary/10 via-accent/40 to-card">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider">Monthly rent</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider">
+                Monthly rent
+              </div>
               <div className="mt-1 text-3xl font-bold">
                 {formatCurrency(booking?.booking?.monthlyRent ?? 0)}
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                {booking?.booking ? `Booking status: ${booking.booking.status}` : "No active booking yet"}
+                {booking?.booking
+                  ? `Booking status: ${booking.booking.status}`
+                  : "No active booking yet"}
               </div>
             </div>
             <div className="flex gap-2">
