@@ -93,7 +93,7 @@ export async function askAssistant(question: string): Promise<AssistantResponse>
 
   if (results.length === 0) {
     return {
-      answer: "I don't have information on that yet. I've flagged this for staff to follow up.",
+      answer: "I don't have information on that yet. You can send this question to your PG owner for follow-up.",
       resolved: false,
       sources: [],
       topScore: 0,
@@ -105,7 +105,7 @@ export async function askAssistant(question: string): Promise<AssistantResponse>
 
   if (topScore < RELEVANCE_THRESHOLD) {
     return {
-      answer: "I'm not confident I have the right info for that. I've flagged this for staff to follow up.",
+      answer: "I'm not confident I have the right info for that. You can send this question to your PG owner for follow-up.",
       resolved: false,
       sources,
       topScore,

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { properties, rooms } from "../db/schema";
 import { genId } from "../id";
+import { hasVacantBed } from "../../room-availability";
 import { getSession } from "../auth";
 
 function requireSession() {
@@ -29,13 +30,14 @@ export const listProperties = createServerFn({ method: "GET" })
     const allRooms = await db.select().from(rooms).all();
     return list.map((p) => {
       const propertyRooms = allRooms.filter((r) => r.propertyId === p.id);
-      const availableBeds = propertyRooms.reduce((sum, r) => sum + (r.totalBeds - r.occupiedBeds), 0);
+      const availableBeds = propertyRooms.reduce((sum, r) => sum + (hasVacantBed(r) ? r.totalBeds - r.occupiedBeds : 0), 0);
       const totalBeds = propertyRooms.reduce((sum, r) => sum + r.totalBeds, 0);
       const minRent = propertyRooms.length ? Math.min(...propertyRooms.map((r) => r.rentPerBed)) : null;
       return {
         ...p,
         amenities: JSON.parse(p.amenities || "[]") as string[],
         availableBeds,
+        occupiedBeds: propertyRooms.reduce((sum, r) => sum + r.occupiedBeds, 0),
         totalBeds,
         roomCount: propertyRooms.length,
         minRent,

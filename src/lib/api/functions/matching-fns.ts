@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { tenantPreferences, tenants, bookings, rooms, properties } from "../db/schema";
 import { genId } from "../id";
+import { hasVacantBed } from "../../room-availability";
 import { getSession, getTenantSession } from "../auth";
 
 function requireOwnerSession() {
@@ -210,7 +211,7 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
   if (propertyIds.length === 0) return [];
 
   const allRooms = await db.select().from(rooms).where(inArray(rooms.propertyId, propertyIds)).all();
-  const vacantRooms = allRooms.filter((r) => r.occupiedBeds < r.totalBeds && r.sharingType !== "single");
+  const vacantRooms = allRooms.filter((r) => hasVacantBed(r) && r.sharingType !== "single");
   if (vacantRooms.length === 0) return [];
 
   const allBookings = await db.select().from(bookings).where(inArray(bookings.propertyId, propertyIds)).all();
@@ -225,7 +226,8 @@ export const getOwnerRoomMatches = createServerFn({ method: "GET" }).handler(asy
   // Tenants who have a booking but no roommate assignment yet (or are otherwise
   // unassigned) and have filled out preferences are candidates for matching.
   const bookedTenantIds = new Set(activeBookings.map((b) => b.tenantId));
-  const unassignedWithPrefs = allPrefs.filter((p) => !bookedTenantIds.has(p.tenantId));
+  const candidateIds = new Set(allBookings.filter((b) => b.status === "pending").map((b) => b.tenantId));
+  const unassignedWithPrefs = allPrefs.filter((p) => candidateIds.has(p.tenantId) && !bookedTenantIds.has(p.tenantId));
 
   return vacantRooms.map((room) => {
     const occupantBookings = activeBookings.filter((b) => b.roomId === room.id);

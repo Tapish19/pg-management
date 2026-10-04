@@ -11,7 +11,7 @@ export const getRouter = () => {
         // Retrying doesn't fix a missing/invalid auth cookie, it just makes
         // navigation feel slow.
         retry: (failureCount, error) => {
-          if (error instanceof Error && /sign in/i.test(error.message)) return false;
+          if (error instanceof Error && /sign in|log in/i.test(error.message)) return false;
           return failureCount < 3;
         },
       },

@@ -104,7 +104,7 @@ function PropertiesPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Stat n={p.roomCount} l="Rooms" />
-                  <Stat n={p.totalBeds - p.availableBeds} l="Occupied" />
+                  <Stat n={p.occupiedBeds} l="Occupied" />
                   <Stat n={p.availableBeds} l="Vacant" />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">

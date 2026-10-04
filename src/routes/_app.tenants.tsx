@@ -227,11 +227,11 @@ function OnboardTenantForm({
   rooms,
   onCreated,
 }: {
-  rooms: { id: string; roomNumber: string; propertyId: string; occupiedBeds: number; totalBeds: number }[];
+  rooms: { id: string; roomNumber: string; propertyId: string; occupiedBeds: number; totalBeds: number; status: string }[];
   properties: { id: string; name: string }[];
   onCreated: () => void;
 }) {
-  const availableRooms = rooms.filter((r) => r.occupiedBeds < r.totalBeds);
+  const availableRooms = rooms.filter((r) => r.status !== "maintenance" && r.occupiedBeds < r.totalBeds);
   const [roomId, setRoomId] = useState(availableRooms[0]?.id ?? "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

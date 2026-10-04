@@ -21,13 +21,14 @@ function monthsBetween(start: string, end: Date): number {
 // Builds the model's feature vector for one tenant from real DB rows —
 // no mocked inputs, this pulls the tenant's actual booking/payment/complaint
 // history.
-async function buildFeaturesForTenant(tenantId: string): Promise<RiskFeatures | null> {
-  const booking = await db.select().from(bookings).where(eq(bookings.tenantId, tenantId)).get();
+async function buildFeaturesForTenant(tenantId: string, bookingId: string): Promise<RiskFeatures | null> {
+  const booking = await db.select().from(bookings).where(eq(bookings.id, bookingId)).get();
   if (!booking) return null;
 
   const tenant = await db.select().from(tenants).where(eq(tenants.id, tenantId)).get();
   const allPayments = await db.select().from(payments).where(eq(payments.bookingId, booking.id)).all();
-  const allComplaints = await db.select().from(complaints).where(eq(complaints.tenantId, tenantId)).all();
+  const allComplaints = (await db.select().from(complaints).where(eq(complaints.tenantId, tenantId)).all())
+    .filter((complaint) => complaint.propertyId === booking.propertyId);
 
   const rentPayments = allPayments.filter((p) => p.type === "rent");
   const totalRent = rentPayments.length;
@@ -75,8 +76,14 @@ async function buildFeaturesForTenant(tenantId: string): Promise<RiskFeatures | 
 export const getTenantRiskScore = createServerFn({ method: "GET" })
   .validator((input: unknown): { tenantId: string } => z.object({ tenantId: z.string() }).parse(input))
   .handler(async ({ data }) => {
-    requireSession();
-    const features = await buildFeaturesForTenant(data.tenantId);
+    const session = requireSession();
+    const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+    const propertyIds = new Set(ownerProperties.map((p) => p.id));
+    const tenantBookings = await db.select().from(bookings).where(eq(bookings.tenantId, data.tenantId)).all();
+    const ownedBooking = tenantBookings.filter((b) => propertyIds.has(b.propertyId))
+      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
+    if (!ownedBooking) throw new Error("Tenant not found");
+    const features = await buildFeaturesForTenant(data.tenantId, ownedBooking.id);
     if (!features) return null;
 
     const model = getRiskModel();
@@ -109,7 +116,7 @@ export const listTenantRiskScores = createServerFn({ method: "GET" }).handler(as
 
   const results = await Promise.all(
     relevantBookings.map(async (booking) => {
-      const features = await buildFeaturesForTenant(booking.tenantId);
+      const features = await buildFeaturesForTenant(booking.tenantId, booking.id);
       if (!features) return null;
       const probability = model.predictProba(featuresToVector(features));
       return {

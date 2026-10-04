@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { DEMO_USERS, type DemoUser, type Role } from "./demo-data";
 import { getCurrentSession, login as loginFn, signup as signupFn, logout as logoutFn } from "./api/functions/auth-fns";
 import { getCurrentTenantSession, loginTenant as loginTenantFn, logoutTenant as logoutTenantFn } from "./api/functions/tenant-fns";
@@ -8,13 +9,14 @@ const KEY = "pgone.session.v1";
 type AuthCtx = {
   user: DemoUser | null;
   loading: boolean;
+  isDemo: boolean;
   // Real owner/admin auth, backed by the database
   loginReal: (email: string, password: string) => Promise<void>;
   signupReal: (name: string, email: string, password: string, phone?: string) => Promise<void>;
   // Real tenant auth, backed by the database (matches email + phone on an existing booking)
   loginTenantReal: (email: string, phone: string) => Promise<void>;
   // Demo auth for staff previews (not yet backed by real data — see roadmap)
-  loginAs: (role: Role) => void;
+  loginAs: (role: Role) => Promise<void>;
   logout: () => Promise<void>;
   setRole: (role: Role) => void;
 };
@@ -22,15 +24,18 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx>({
   user: null,
   loading: true,
+  isDemo: false,
   loginReal: async () => {},
   signupReal: async () => {},
   loginTenantReal: async () => {},
-  loginAs: () => {},
+  loginAs: async () => {},
   logout: async () => {},
   setRole: () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const [isDemo, setIsDemo] = useState(false);
   const [user, setUser] = useState<DemoUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Real (owner/admin) session takes priority
         const session = await getCurrentSession();
         if (session) {
-          setUser({ ...DEMO_USERS.admin, id: session.ownerId, name: session.name, email: session.email });
+          setUser({ ...DEMO_USERS.admin, id: session.ownerId, name: session.name, email: session.email, phone: session.phone ?? "" });
           setLoading(false);
           return;
         }
@@ -51,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Real tenant session comes next
         const tenantSession = await getCurrentTenantSession();
         if (tenantSession) {
-          setUser({ ...DEMO_USERS.tenant, id: tenantSession.id, name: tenantSession.name, email: tenantSession.email });
+          setUser({ ...DEMO_USERS.tenant, id: tenantSession.id, name: tenantSession.name, email: tenantSession.email, phone: tenantSession.phone });
           setLoading(false);
           return;
         }
@@ -63,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (raw) {
           const parsed = JSON.parse(raw) as { role: Role };
           setUser(DEMO_USERS[parsed.role]);
+          setIsDemo(true);
         }
       } catch {
         /* ignore */
@@ -73,20 +79,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginReal = async (email: string, password: string) => {
     const owner = await loginFn({ data: { email, password } });
-    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email });
+    queryClient.clear();
+    localStorage.removeItem(KEY);
+    setIsDemo(false);
+    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email, phone: owner.phone ?? "" });
   };
 
   const signupReal = async (name: string, email: string, password: string, phone?: string) => {
     const owner = await signupFn({ data: { name, email, password, phone } });
-    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email });
+    queryClient.clear();
+    localStorage.removeItem(KEY);
+    setIsDemo(false);
+    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email, phone: owner.phone ?? "" });
   };
 
   const loginTenantReal = async (email: string, phone: string) => {
     const tenant = await loginTenantFn({ data: { email, phone } });
-    setUser({ ...DEMO_USERS.tenant, id: tenant.id, name: tenant.name, email: tenant.email });
+    queryClient.clear();
+    localStorage.removeItem(KEY);
+    setIsDemo(false);
+    setUser({ ...DEMO_USERS.tenant, id: tenant.id, name: tenant.name, email: tenant.email, phone: tenant.phone });
   };
 
-  const loginAs = (role: Role) => {
+  const loginAs = async (role: Role) => {
+    await logoutFn();
+    await logoutTenantFn();
+    queryClient.clear();
+    setIsDemo(true);
     localStorage.setItem(KEY, JSON.stringify({ role }));
     setUser(DEMO_USERS[role]);
   };
@@ -103,12 +122,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
     setUser(null);
+    setIsDemo(false);
+    queryClient.clear();
   };
-  const setRole = (role: Role) => loginAs(role);
+  const setRole = (role: Role) => {
+    if (!isDemo) return;
+    queryClient.clear();
+    localStorage.setItem(KEY, JSON.stringify({ role }));
+    setUser(DEMO_USERS[role]);
+  };
 
   return (
     <Ctx.Provider
-      value={{ user, loading, loginReal, signupReal, loginTenantReal, loginAs, logout, setRole }}
+      value={{ user, loading, isDemo, loginReal, signupReal, loginTenantReal, loginAs, logout, setRole }}
     >
       {children}
     </Ctx.Provider>

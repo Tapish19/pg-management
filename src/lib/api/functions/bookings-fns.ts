@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { bookings, rooms, tenants, properties } from "../db/schema";
 import { genId } from "../id";
+import { hasVacantBed, occupancyAfterStatusChange } from "../../room-availability";
 import { getSession } from "../auth";
 
 function requireSession() {
@@ -79,7 +80,7 @@ export const createBooking = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const room = await db.select().from(rooms).where(eq(rooms.id, data.roomId)).get();
     if (!room) throw new Error("Room not found");
-    if (room.occupiedBeds >= room.totalBeds) throw new Error("This room is fully occupied");
+    if (!hasVacantBed(room)) throw new Error("Room has no available beds");
 
     const tenantId = genId("tenant");
     await db.insert(tenants).values({ id: tenantId, ...data.tenant });
@@ -121,7 +122,7 @@ export const onboardTenant = createServerFn({ method: "POST" })
     if (!room) throw new Error("Room not found");
     const property = await db.select().from(properties).where(eq(properties.id, room.propertyId)).get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Room not found");
-    if (room.occupiedBeds >= room.totalBeds) throw new Error("This room is fully occupied");
+    if (!hasVacantBed(room)) throw new Error("Room has no available beds");
 
     const tenantId = genId("tenant");
     await db.insert(tenants).values({
@@ -180,30 +181,17 @@ export const updateBookingStatus = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const session = requireSession();
-    const booking = await db.select().from(bookings).where(eq(bookings.id, data.id)).get();
-    if (!booking) throw new Error("Not found");
-    const property = await db.select().from(properties).where(eq(properties.id, booking.propertyId)).get();
-    if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
+    return db.transaction(async (tx) => {
+      const booking = await tx.select().from(bookings).where(eq(bookings.id, data.id)).get();
+      if (!booking) throw new Error("Not found");
+      const property = await tx.select().from(properties).where(eq(properties.id, booking.propertyId)).get();
+      if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
-    await db.update(bookings).set({ status: data.status }).where(eq(bookings.id, data.id));
-
-    const room = await db.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();
-    if (room) {
-      if ((data.status === "confirmed" || data.status === "active") && booking.status === "pending") {
-        const occupied = room.occupiedBeds + 1;
-        await db
-          .update(rooms)
-          .set({ occupiedBeds: occupied, status: occupied >= room.totalBeds ? "full" : "available" })
-          .where(eq(rooms.id, room.id));
-      }
-      if (
-        (data.status === "checked_out" || data.status === "cancelled") &&
-        (booking.status === "confirmed" || booking.status === "active")
-      ) {
-        const occupied = Math.max(0, room.occupiedBeds - 1);
-        await db.update(rooms).set({ occupiedBeds: occupied, status: "available" }).where(eq(rooms.id, room.id));
-      }
-    }
-
-    return { ok: true };
+      const room = await tx.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();
+      if (!room) throw new Error("Room not found");
+      const occupancy = occupancyAfterStatusChange(room, booking.status, data.status);
+      await tx.update(rooms).set(occupancy).where(eq(rooms.id, room.id));
+      await tx.update(bookings).set({ status: data.status }).where(eq(bookings.id, data.id));
+      return { ok: true };
+    });
   });

@@ -24,7 +24,7 @@ function formatCurrency(n: number) {
 }
 
 function ReportsPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["reports", "mine"],
     queryFn: () => getOwnerReports(),
   });
@@ -33,7 +33,12 @@ function ReportsPage() {
     <>
       <PageHeader title="Reports" description="Operational and financial insights, computed from live data." />
 
-      {isLoading || !data ? (
+      {error ? (
+        <Card className="p-6 space-y-3">
+          <p role="alert" className="text-sm text-destructive">Could not load reports. {error.message}</p>
+          <button className="text-sm text-primary underline" onClick={() => refetch()}>Try again</button>
+        </Card>
+      ) : isLoading || !data ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>

@@ -10,6 +10,7 @@ import {
   setTenantSessionCookie,
   clearTenantSessionCookie,
   getTenantSession,
+  clearSessionCookie,
 } from "../auth";
 
 function requireTenantSession() {
@@ -59,12 +60,15 @@ export const loginTenant = createServerFn({ method: "POST" })
 
     const token = createTenantSessionToken({ tenantId: match.id, name: match.name, email: match.email });
     setTenantSessionCookie(token);
-    return { id: match.id, name: match.name, email: match.email };
+    clearSessionCookie();
+    return { id: match.id, name: match.name, email: match.email, phone: match.phone };
   });
 
 export const getCurrentTenantSession = createServerFn({ method: "GET" }).handler(async () => {
   const session = getTenantSession();
-  return session ? { id: session.tenantId, name: session.name, email: session.email } : null;
+  if (!session) return null;
+  const tenant = await db.select().from(tenants).where(eq(tenants.id, session.tenantId)).get();
+  return tenant ? { id: tenant.id, name: tenant.name, email: tenant.email, phone: tenant.phone } : null;
 });
 
 export const logoutTenant = createServerFn({ method: "POST" }).handler(async () => {

@@ -114,7 +114,7 @@ function PropertyRooms({ propertyId }: { propertyId: string }) {
           <Card key={r.id} className="p-4">
             <div className="flex items-center justify-between">
               <div className="font-semibold">Room {r.roomNumber}</div>
-              <Badge variant={vacant > 0 ? "secondary" : "outline"}>{vacant > 0 ? "Available" : "Full"}</Badge>
+              <Badge variant={vacant > 0 && r.status !== "maintenance" ? "secondary" : "outline"}>{r.status === "maintenance" ? "Maintenance" : vacant > 0 ? "Available" : "Full"}</Badge>
             </div>
             <div className="text-xs text-muted-foreground mt-1 capitalize">{r.sharingType}-sharing</div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">

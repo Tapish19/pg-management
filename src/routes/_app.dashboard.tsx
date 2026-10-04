@@ -86,7 +86,7 @@ function AdminDashboard() {
 
   const totalBeds = (properties || []).reduce((s, p) => s + (p.totalBeds ?? 0), 0);
   const occupied = (properties || []).reduce(
-    (s, p) => s + ((p.totalBeds ?? 0) - (p.availableBeds ?? 0)),
+    (s, p) => s + p.occupiedBeds,
     0,
   );
   const activeTenants = (tenantRows || []).filter((r) => r.booking.status === "active").length;

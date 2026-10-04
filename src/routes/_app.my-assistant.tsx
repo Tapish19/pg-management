@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Send, Bot, User, AlertTriangle } from "lucide-react";
 import { askAssistantFn } from "@/lib/api/functions/assistant-fns";
+import { createMyComplaint } from "@/lib/api/functions/tenant-fns";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/my-assistant")({ component: MyAssistantPage });
 
@@ -15,13 +18,32 @@ type ChatMessage = {
   text: string;
   resolved?: boolean;
   sources?: string[];
+  question?: string;
+  ticketId?: string;
 };
 
 function MyAssistantPage() {
+  const queryClient = useQueryClient();
+  const [submittingTicket, setSubmittingTicket] = useState(false);
+  async function sendToStaff(index: number) {
+    const message = messages[index];
+    if (!message.question || message.ticketId || submittingTicket) return;
+    setSubmittingTicket(true);
+    try {
+      const ticket = await createMyComplaint({ data: { title: message.question, category: "other", priority: "medium" } });
+      setMessages((previous) => previous.map((item, i) => i === index ? { ...item, ticketId: ticket.id } : item));
+      await queryClient.invalidateQueries({ queryKey: ["my-complaints"] });
+      toast.success("Question sent to your PG owner");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send question");
+    } finally {
+      setSubmittingTicket(false);
+    }
+  }
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      text: "Hi! Ask me anything about hostel policies, timings, fees, or amenities — I'll answer from the official policy docs, or flag it for staff if I'm not sure.",
+      text: "Hi! Ask me about hostel policies, timings, fees, or amenities. If I can't answer, you can send your question to your PG owner.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -44,12 +66,12 @@ function MyAssistantPage() {
       const result = await askAssistantFn({ data: { question } });
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: result.answer, resolved: result.resolved, sources: result.sources },
+        { role: "assistant", text: result.answer, resolved: result.resolved, sources: result.sources, question },
       ]);
     } catch {
       setMessages((m) => [
         ...m,
-        { role: "assistant", text: "Something went wrong. Please try again or file a complaint instead.", resolved: false },
+        { role: "assistant", text: "Something went wrong. Please try again or send your question to your PG owner.", resolved: false, question },
       ]);
     } finally {
       setLoading(false);
@@ -78,7 +100,8 @@ function MyAssistantPage() {
                 {m.role === "assistant" && m.resolved === false && (
                   <div className="mt-2 flex items-center gap-1 text-xs text-amber-600">
                     <AlertTriangle className="h-3 w-3" />
-                    <span>Flagged for staff follow-up</span>
+                    <span>{m.ticketId ? `Sent to staff: ${m.ticketId}` : "Staff can help with this question"}</span>
+                    {!m.ticketId && m.question && <Button size="sm" variant="outline" disabled={submittingTicket} onClick={() => sendToStaff(i)}>Send to staff</Button>}
                   </div>
                 )}
                 {m.role === "assistant" && m.sources && m.sources.length > 0 && (

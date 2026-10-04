@@ -11,6 +11,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
   getSession,
+  clearTenantSessionCookie,
 } from "../auth";
 
 export const signup = createServerFn({ method: "POST" })
@@ -35,8 +36,9 @@ export const signup = createServerFn({ method: "POST" })
 
     const token = createSessionToken({ ownerId: id, email: data.email, name: data.name });
     setSessionCookie(token);
+    clearTenantSessionCookie();
 
-    return { id, name: data.name, email: data.email };
+    return { id, name: data.name, email: data.email, phone: data.phone };
   });
 
 export const login = createServerFn({ method: "POST" })
@@ -52,8 +54,9 @@ export const login = createServerFn({ method: "POST" })
 
     const token = createSessionToken({ ownerId: owner.id, email: owner.email, name: owner.name });
     setSessionCookie(token);
+    clearTenantSessionCookie();
 
-    return { id: owner.id, name: owner.name, email: owner.email };
+    return { id: owner.id, name: owner.name, email: owner.email, phone: owner.phone };
   });
 
 export const logout = createServerFn({ method: "POST" }).handler(async () => {
@@ -62,5 +65,8 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
 });
 
 export const getCurrentSession = createServerFn({ method: "GET" }).handler(async () => {
-  return getSession();
+  const session = getSession();
+  if (!session) return null;
+  const owner = await db.select().from(owners).where(eq(owners.id, session.ownerId)).get();
+  return owner ? { ...session, name: owner.name, email: owner.email, phone: owner.phone } : null;
 });

@@ -86,10 +86,14 @@ function AuthPage() {
     }
   };
 
-  const demo = (role: Role) => {
-    loginAs(role);
+  const demo = async (role: Role) => {
+    try {
+    await loginAs(role);
     toast.success(`Signed in as ${role} (demo)`);
     navigate({ to: "/dashboard" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start demo");
+    }
   };
 
   return (

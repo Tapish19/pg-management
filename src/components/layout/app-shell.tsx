@@ -88,7 +88,7 @@ const TENANT_NAV: NavItem[] = [
   { to: "/my-food", label: "Food Menu", icon: UtensilsCrossed },
   { to: "/my-complaints", label: "Complaints", icon: MessageSquare },
   { to: "/my-visitors", label: "Visitors", icon: UserSquare2 },
-  { to: "/notices", label: "Notices", icon: Megaphone },
+  { to: "/notifications", label: "Notices", icon: Megaphone },
   { to: "/profile", label: "Profile & KYC", icon: FileText },
 ];
 
@@ -142,6 +142,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 }
 
 function Sidebar({ role }: { role: Role }) {
+  const { isDemo } = useAuth();
   const items = NAV_BY_ROLE[role];
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-sidebar-border bg-sidebar">
@@ -154,12 +155,12 @@ function Sidebar({ role }: { role: Role }) {
         </div>
         <NavList items={items} />
       </ScrollArea>
-      <div className="p-3 border-t border-sidebar-border">
+      {isDemo && <div className="p-3 border-t border-sidebar-border">
         <div className="rounded-lg bg-accent/60 p-3 text-xs text-accent-foreground">
           <div className="font-semibold mb-0.5">Demo mode</div>
           Data is seeded for preview. Switch roles from the top bar.
         </div>
-      </div>
+      </div>}
     </aside>
   );
 }
@@ -211,8 +212,8 @@ function NotificationBell({ role }: { role: Role }) {
 }
 
 function RoleSwitcher() {
-  const { user, setRole } = useAuth();
-  if (!user) return null;
+  const { user, setRole, isDemo } = useAuth();
+  if (!user || !isDemo) return null;
   const labels: Record<Role, string> = { admin: "Owner / Admin", staff: "Staff", tenant: "Tenant" };
   return (
     <DropdownMenu>
