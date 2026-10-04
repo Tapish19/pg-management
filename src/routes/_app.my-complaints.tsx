@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { getMyComplaints, createMyComplaint } from "@/lib/api/functions/tenant-fns";
+import { getMyComplaints, createMyComplaint } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/my-complaints")({ component: MyComplaintsPage });
 

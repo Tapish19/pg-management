@@ -27,7 +27,7 @@ import {
   listOwnerProperties,
   createProperty,
   updateProperty,
-} from "@/lib/api/functions/properties-fns";
+} from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/properties")({ component: PropertiesPage });

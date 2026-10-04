@@ -24,8 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Receipt, Plus } from "lucide-react";
-import { listOwnerExpenses, createExpense, updateExpenseStatus } from "@/lib/api/functions/expenses-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
+import { listOwnerExpenses, createExpense, updateExpenseStatus } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/expenses")({ component: ExpensesPage });

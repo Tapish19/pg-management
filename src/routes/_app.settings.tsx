@@ -12,6 +12,14 @@ import { useAuth } from "@/lib/auth";
 import { getOwnerSettings, updateOwnerSettings } from "@/lib/api/functions/settings-fns";
 import { toast } from "sonner";
 import { SampleDataCard } from "@/components/sample-data-card";
+import { demoPages } from "@/lib/demo-store";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import type { NotificationPreferences } from "@/lib/owner-settings";
 import {
   defaultNotificationPreferences,
@@ -97,6 +105,8 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
           JSON.stringify({ ...current, ...update }),
         );
         await queryClient.invalidateQueries({ queryKey: ["owner-settings", "demo", demoOwnerId] });
+        await queryClient.invalidateQueries({ queryKey: ["owner-notifications"] });
+        await queryClient.invalidateQueries({ queryKey: ["my-booking"] });
         toast.success("Demo settings saved on this browser");
         return;
       }
@@ -230,40 +240,44 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
           </Card>
         </TabsContent>
         <TabsContent value="payments" className="mt-4">
-          <Card className="p-6 max-w-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Cash</div>
-                <div className="text-xs text-muted-foreground">Accept manual cash entries</div>
+          {demoOwnerId ? (
+            <DemoPaymentSettings />
+          ) : (
+            <Card className="p-6 max-w-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">Cash</div>
+                  <div className="text-xs text-muted-foreground">Accept manual cash entries</div>
+                </div>
+                <Switch defaultChecked />
               </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">UPI</div>
-                <div className="text-xs text-muted-foreground">Show UPI ID at checkout</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">UPI</div>
+                  <div className="text-xs text-muted-foreground">Show UPI ID at checkout</div>
+                </div>
+                <Switch defaultChecked />
               </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Razorpay</div>
-                <div className="text-xs text-muted-foreground">Add live API keys to enable</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">Razorpay</div>
+                  <div className="text-xs text-muted-foreground">Add live API keys to enable</div>
+                </div>
+                <Button size="sm" variant="outline">
+                  Connect
+                </Button>
               </div>
-              <Button size="sm" variant="outline">
-                Connect
-              </Button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Stripe</div>
-                <div className="text-xs text-muted-foreground">For international cards</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">Stripe</div>
+                  <div className="text-xs text-muted-foreground">For international cards</div>
+                </div>
+                <Button size="sm" variant="outline">
+                  Connect
+                </Button>
               </div>
-              <Button size="sm" variant="outline">
-                Connect
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          )}
         </TabsContent>
         <TabsContent value="notify" className="mt-4">
           <Card className="p-6 max-w-2xl space-y-4">
@@ -309,14 +323,91 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
                   <div className="font-medium">{r}</div>
                   <div className="text-xs text-muted-foreground">{d}</div>
                 </div>
-                <Button size="sm" variant="outline">
-                  Edit
-                </Button>
+                {demoOwnerId ? (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        View access
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{r} access</DialogTitle>
+                      </DialogHeader>
+                      <p className="text-sm">{d}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {demoPages[
+                          r === "Owner / Admin" ? "admin" : r === "Tenant" ? "tenant" : "staff"
+                        ].map((path) => (
+                          <span key={path} className="rounded border px-2 py-1 text-sm">
+                            {path.slice(1).replaceAll("-", " ")}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Use the role switcher to explore this role's demo.
+                      </p>
+                    </DialogContent>
+                  </Dialog>
+                ) : (
+                  <Button size="sm" variant="outline">
+                    Edit
+                  </Button>
+                )}
               </div>
             ))}
           </Card>
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+function DemoPaymentSettings() {
+  const [methods, setMethods] = useState<Record<string, boolean>>(() => {
+    try {
+      return {
+        cash: true,
+        upi: true,
+        razorpay: false,
+        stripe: false,
+        ...JSON.parse(localStorage.getItem("pgone.demo.payment-methods.v1") ?? "{}"),
+      };
+    } catch {
+      return { cash: true, upi: true, razorpay: false, stripe: false };
+    }
+  });
+  function change(key: string, value: boolean) {
+    const next = { ...methods, [key]: value };
+    try {
+      localStorage.setItem("pgone.demo.payment-methods.v1", JSON.stringify(next));
+      setMethods(next);
+      toast.success("Demo payment preference saved");
+    } catch {
+      toast.error("Could not save browser preferences");
+    }
+  }
+  return (
+    <Card className="p-6 max-w-2xl space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Demo payment connections are simulated. No credentials or real payment account are needed.
+      </p>
+      {["cash", "upi", "razorpay", "stripe"].map((key) => (
+        <div key={key} className="flex items-center justify-between">
+          <span className="capitalize font-medium">{key === "upi" ? "UPI" : key}</span>
+          {key === "cash" || key === "upi" ? (
+            <Switch
+              aria-label={key}
+              checked={methods[key]}
+              onCheckedChange={(value) => change(key, value)}
+            />
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => change(key, !methods[key])}>
+              {methods[key] ? "Disconnect demo" : "Connect demo"}
+            </Button>
+          )}
+        </div>
+      ))}
+    </Card>
   );
 }

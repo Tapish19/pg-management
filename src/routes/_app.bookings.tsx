@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { listOwnerBookings, updateBookingStatus } from "@/lib/api/functions/bookings-fns";
+import { listOwnerBookings, updateBookingStatus } from "@/lib/demo-api";
 import { toast } from "sonner";
 import { includesSearch } from "@/lib/search-filters";
 

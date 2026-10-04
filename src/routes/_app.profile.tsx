@@ -11,7 +11,7 @@ import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getMyKyc } from "@/lib/api/functions/kyc-fns";
+import { getMyKyc } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/profile")({ component: ProfilePage });
 
@@ -19,7 +19,7 @@ function ProfilePage() {
   const { user, isDemo, updateProfile } = useAuth();
   const [details, setDetails] = useState({ name: "", email: "", phone: "" });
   const [saving, setSaving] = useState(false);
-  const resident = user?.role === "tenant" && !isDemo;
+  const resident = user?.role === "tenant";
   const kyc = useQuery({
     queryKey: ["my-kyc", user?.id],
     queryFn: () => getMyKyc(),
@@ -94,12 +94,12 @@ function ProfilePage() {
                 onChange={(e) => setDetails({ ...details, phone: e.target.value })}
               />
             </div>
-            <Button type="submit" disabled={saving || isDemo}>
+            <Button type="submit" disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
             </Button>
             {isDemo && (
               <p className="text-sm text-muted-foreground">
-                Sign in to a real account to save profile changes.
+                Demo profile changes save on this browser.
               </p>
             )}
           </form>

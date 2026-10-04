@@ -17,9 +17,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Megaphone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { listOwnerNotices, createNotice } from "@/lib/api/functions/notices-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listRooms } from "@/lib/api/functions/rooms-fns";
+import { listOwnerNotices, createNotice } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listRooms } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/notices")({ component: NoticesPage });

@@ -2,8 +2,8 @@ import { useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { NOTIFICATIONS } from "@/lib/demo-data";
-import { getMyNotices } from "@/lib/api/functions/tenant-fns";
-import { getOwnerNotifications } from "@/lib/api/functions/notifications-fns";
+import { getMyNotices } from "@/lib/demo-api";
+import { getOwnerNotifications } from "@/lib/demo-api";
 import { notificationStorageKey, parseNotificationReads } from "@/lib/notification-state";
 
 const EVENT = "pgone-notification-reads";
@@ -37,8 +37,8 @@ export function useNotifications() {
     () => "{}",
   );
   const reads = parseNotificationReads(raw);
-  const resident = user?.role === "tenant" && !isDemo;
-  const owner = user?.role === "admin" && !isDemo;
+  const resident = user?.role === "tenant";
+  const owner = user?.role === "admin" || (isDemo && user?.role === "staff");
   const query = useQuery({
     queryKey: ["my-notices", user?.id],
     queryFn: () => getMyNotices(),

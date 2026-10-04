@@ -38,8 +38,8 @@ import {
   updateStaff,
   listStaffAttendance,
   recordStaffAttendance,
-} from "@/lib/api/functions/staff-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
+} from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/staff")({ component: StaffPage });

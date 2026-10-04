@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus } from "lucide-react";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listRooms, createRoom, updateRoom } from "@/lib/api/functions/rooms-fns";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listRooms, createRoom, updateRoom } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/rooms")({

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
-import { getMyFoodMenu, createMyComplaint } from "@/lib/api/functions/tenant-fns";
+import { getMyFoodMenu, createMyComplaint } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/my-food")({ component: MyFoodPage });
 

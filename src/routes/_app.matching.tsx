@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui-ext/stat";
 import { Users, BedDouble } from "lucide-react";
-import { getOwnerRoomMatches } from "@/lib/api/functions/matching-fns";
+import { getOwnerRoomMatches } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/matching")({ component: MatchingPage });
 

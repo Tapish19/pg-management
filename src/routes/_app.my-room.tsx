@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusPill } from "@/components/ui-ext/stat";
 import { BedDouble, Wifi, UtensilsCrossed, Snowflake, ShieldCheck, ArrowRight } from "lucide-react";
-import { getMyBooking } from "@/lib/api/functions/tenant-fns";
+import { getMyBooking } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/my-room")({ component: MyRoomPage });
 

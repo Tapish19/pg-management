@@ -9,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { UtensilsCrossed, Check } from "lucide-react";
-import { getFoodMenu, updateFoodMenuDay } from "@/lib/api/functions/food-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
+import { getFoodMenu, updateFoodMenuDay } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/food")({ component: FoodPage });

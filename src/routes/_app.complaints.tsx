@@ -25,9 +25,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
-import { listOwnerComplaints, createComplaint, updateComplaint } from "@/lib/api/functions/complaints-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listOwnerStaff } from "@/lib/api/functions/staff-fns";
+import { listOwnerComplaints, createComplaint, updateComplaint } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listOwnerStaff } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/complaints")({ component: ComplaintsPage });

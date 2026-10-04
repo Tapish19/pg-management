@@ -15,7 +15,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { getOwnerReports } from "@/lib/api/functions/reports-fns";
+import { getOwnerReports } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/reports")({ component: ReportsPage });
 

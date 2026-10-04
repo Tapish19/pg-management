@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Wallet, AlertTriangle, CheckCircle2, Clock, Download } from "lucide-react";
-import { listOwnerPayments } from "@/lib/api/functions/payments-fns";
+import { listOwnerPayments } from "@/lib/demo-api";
 import { downloadCsv } from "@/lib/csv";
 
 export const Route = createFileRoute("/_app/payments")({ component: PaymentsPage });

@@ -1,9 +1,19 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DEMO_USERS, type DemoUser, type Role } from "./demo-data";
-import { getCurrentSession, login as loginFn, signup as signupFn, logout as logoutFn } from "./api/functions/auth-fns";
-import { getCurrentTenantSession, loginTenant as loginTenantFn, logoutTenant as logoutTenantFn } from "./api/functions/tenant-fns";
-import { saveProfile } from "./api/functions/profile-fns";
+import {
+  getCurrentSession,
+  login as loginFn,
+  signup as signupFn,
+  logout as logoutFn,
+} from "./api/functions/auth-fns";
+import {
+  getCurrentTenantSession,
+  loginTenant as loginTenantFn,
+  logoutTenant as logoutTenantFn,
+} from "./api/functions/tenant-fns";
+import { saveProfile } from "./demo-api";
+import { demoRole, demoProfile } from "./demo-store";
 
 const KEY = "pgone.session.v1";
 
@@ -44,11 +54,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      const savedDemoRole = demoRole();
+      if (savedDemoRole) {
+        setUser(demoProfile(savedDemoRole));
+        setIsDemo(true);
+        setLoading(false);
+        return;
+      }
       try {
         // Real (owner/admin) session takes priority
         const session = await getCurrentSession();
+        if (demoRole()) return;
         if (session) {
-          setUser({ ...DEMO_USERS.admin, id: session.ownerId, name: session.name, email: session.email, phone: session.phone ?? "" });
+          setUser({
+            ...DEMO_USERS.admin,
+            id: session.ownerId,
+            name: session.name,
+            email: session.email,
+            phone: session.phone ?? "",
+          });
           setLoading(false);
           return;
         }
@@ -58,8 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Real tenant session comes next
         const tenantSession = await getCurrentTenantSession();
+        if (demoRole()) return;
         if (tenantSession) {
-          setUser({ ...DEMO_USERS.tenant, id: tenantSession.id, name: tenantSession.name, email: tenantSession.email, phone: tenantSession.phone });
+          setUser({
+            ...DEMO_USERS.tenant,
+            id: tenantSession.id,
+            name: tenantSession.name,
+            email: tenantSession.email,
+            phone: tenantSession.phone,
+          });
           setLoading(false);
           return;
         }
@@ -70,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const raw = typeof window !== "undefined" ? localStorage.getItem(KEY) : null;
         if (raw) {
           const parsed = JSON.parse(raw) as { role: Role };
-          setUser(DEMO_USERS[parsed.role]);
+          setUser(demoProfile(parsed.role));
           setIsDemo(true);
         }
       } catch {
@@ -85,7 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     localStorage.removeItem(KEY);
     setIsDemo(false);
-    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email, phone: owner.phone ?? "" });
+    setUser({
+      ...DEMO_USERS.admin,
+      id: owner.id,
+      name: owner.name,
+      email: owner.email,
+      phone: owner.phone ?? "",
+    });
   };
 
   const signupReal = async (name: string, email: string, password: string, phone?: string) => {
@@ -93,7 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     localStorage.removeItem(KEY);
     setIsDemo(false);
-    setUser({ ...DEMO_USERS.admin, id: owner.id, name: owner.name, email: owner.email, phone: owner.phone ?? "" });
+    setUser({
+      ...DEMO_USERS.admin,
+      id: owner.id,
+      name: owner.name,
+      email: owner.email,
+      phone: owner.phone ?? "",
+    });
   };
 
   const loginTenantReal = async (email: string, phone: string) => {
@@ -101,19 +144,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     localStorage.removeItem(KEY);
     setIsDemo(false);
-    setUser({ ...DEMO_USERS.tenant, id: tenant.id, name: tenant.name, email: tenant.email, phone: tenant.phone });
+    setUser({
+      ...DEMO_USERS.tenant,
+      id: tenant.id,
+      name: tenant.name,
+      email: tenant.email,
+      phone: tenant.phone,
+    });
   };
 
   const loginAs = async (role: Role) => {
-    await logoutFn();
-    await logoutTenantFn();
     queryClient.clear();
     setIsDemo(true);
     localStorage.setItem(KEY, JSON.stringify({ role }));
-    setUser(DEMO_USERS[role]);
+    setUser(demoProfile(role));
+    setLoading(false);
   };
   const logout = async () => {
     localStorage.removeItem(KEY);
+    if (isDemo) {
+      setUser(null);
+      setIsDemo(false);
+      queryClient.clear();
+      return;
+    }
     try {
       await logoutFn();
     } catch {
@@ -132,19 +186,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isDemo) return;
     queryClient.clear();
     localStorage.setItem(KEY, JSON.stringify({ role }));
-    setUser(DEMO_USERS[role]);
+    setUser(demoProfile(role));
   };
 
   const updateProfile = async (details: { name: string; email: string; phone: string }) => {
-    if (isDemo) throw new Error("Profile saving requires a real account");
     const saved = await saveProfile({ data: details });
-    setUser((current) => current ? { ...current, ...saved } : current);
+    setUser((current) => (current ? { ...current, ...saved } : current));
     await queryClient.invalidateQueries();
   };
 
   return (
     <Ctx.Provider
-      value={{ user, loading, isDemo, updateProfile, loginReal, signupReal, loginTenantReal, loginAs, logout, setRole }}
+      value={{
+        user,
+        loading,
+        isDemo,
+        updateProfile,
+        loginReal,
+        signupReal,
+        loginTenantReal,
+        loginAs,
+        logout,
+        setRole,
+      }}
     >
       {children}
     </Ctx.Provider>

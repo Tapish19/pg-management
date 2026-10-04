@@ -16,7 +16,7 @@ import {
 import { StatusPill } from "@/components/ui-ext/stat";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { getMyVisitors, createMyVisitor } from "@/lib/api/functions/tenant-fns";
+import { getMyVisitors, createMyVisitor } from "@/lib/demo-api";
 
 export const Route = createFileRoute("/_app/my-visitors")({ component: MyVisitorsPage });
 

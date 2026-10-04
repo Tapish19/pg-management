@@ -38,18 +38,18 @@ import {
   NOTIFICATIONS,
 } from "@/lib/demo-data";
 import { useQuery } from "@tanstack/react-query";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listOwnerTenants, listOwnerBookings } from "@/lib/api/functions/bookings-fns";
-import { listOwnerStaff } from "@/lib/api/functions/staff-fns";
-import { listOwnerComplaints } from "@/lib/api/functions/complaints-fns";
-import { listOwnerVisitors } from "@/lib/api/functions/visitors-fns";
-import { getFoodMenu } from "@/lib/api/functions/food-fns";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listOwnerTenants, listOwnerBookings } from "@/lib/demo-api";
+import { listOwnerStaff } from "@/lib/demo-api";
+import { listOwnerComplaints } from "@/lib/demo-api";
+import { listOwnerVisitors } from "@/lib/demo-api";
+import { getFoodMenu } from "@/lib/demo-api";
 import {
   getMyBooking,
   getMyComplaints,
   getMyPayments,
   getMyNotices,
-} from "@/lib/api/functions/tenant-fns";
+} from "@/lib/demo-api";
 import {
   Area,
   AreaChart,
@@ -359,7 +359,7 @@ function StaffDashboard() {
     enabled: !!firstPropertyId,
   });
 
-  const tasks = (complaints || []).filter((c) => c.status !== "resolved" && c.status !== "closed");
+  const tasks = (complaints || []).filter((c) => c.assignedTo === user?.id && c.status !== "resolved" && c.status !== "closed");
   const today = new Date().toLocaleDateString("en-US", { weekday: "long" });
   const todaysMenu = (menu || []).find((m) => m.day === today) as
     { breakfast: string; lunch: string; dinner: string } | undefined;

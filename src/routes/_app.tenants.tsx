@@ -27,10 +27,10 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus, Search } from "lucide-react";
-import { listOwnerTenants, onboardTenant, updateTenantKyc } from "@/lib/api/functions/bookings-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listOwnerRooms } from "@/lib/api/functions/rooms-fns";
-import { listTenantRiskScores } from "@/lib/api/functions/risk-fns";
+import { listOwnerTenants, onboardTenant, updateTenantKyc } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listOwnerRooms } from "@/lib/demo-api";
+import { listTenantRiskScores } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 const RISK_BAND_TONE: Record<string, "success" | "warning" | "destructive"> = {

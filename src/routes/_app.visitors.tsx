@@ -24,9 +24,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
-import { listOwnerVisitors, createVisitor, checkOutVisitor } from "@/lib/api/functions/visitors-fns";
-import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
-import { listOwnerTenants } from "@/lib/api/functions/bookings-fns";
+import { listOwnerVisitors, createVisitor, checkOutVisitor } from "@/lib/demo-api";
+import { listOwnerProperties } from "@/lib/demo-api";
+import { listOwnerTenants } from "@/lib/demo-api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/visitors")({ component: VisitorsPage });

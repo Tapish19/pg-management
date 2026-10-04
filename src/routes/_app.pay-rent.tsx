@@ -16,9 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { getMyBooking, getMyPayments } from "@/lib/api/functions/tenant-fns";
-import { createPaymentOrder, verifyPayment } from "@/lib/api/functions/payments-fns";
+import { getMyBooking, getMyPayments } from "@/lib/demo-api";
+import { createPaymentOrder, verifyPayment } from "@/lib/demo-api";
 import { rentDueDate } from "@/lib/owner-settings";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/pay-rent")({ component: PayRentPage });
 
@@ -40,6 +41,7 @@ function loadRazorpayScript() {
 }
 
 function PayRentPage() {
+  const { isDemo } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -78,6 +80,20 @@ function PayRentPage() {
         },
       });
 
+      if (isDemo) {
+        await verifyPayment({
+          data: {
+            paymentId: order.paymentId,
+            razorpay_order_id: order.orderId,
+            razorpay_payment_id: "demo-payment",
+            razorpay_signature: "demo",
+          },
+        });
+        setPaid(true);
+        toast.success("Demo payment completed. No money was charged.");
+        await queryClient.invalidateQueries();
+        return;
+      }
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded || !window.Razorpay) {
         toast.error("Couldn't load the payment widget. Please try again.");
@@ -145,6 +161,11 @@ function PayRentPage() {
   return (
     <>
       <PageHeader title="Pay Rent" description="Clear dues and view your payment history." />
+      {isDemo && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          Demo payments are simulated. No money is charged.
+        </p>
+      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div>
           <Card className="p-5 mb-4">
@@ -184,8 +205,9 @@ function PayRentPage() {
                   {!paid ? (
                     <div className="space-y-4">
                       <p className="text-sm text-muted-foreground">
-                        You'll be redirected to Razorpay's secure checkout to pay via UPI, card, or
-                        netbanking.
+                        {isDemo
+                          ? "Complete a simulated rent payment. No checkout account is needed and no money will be charged."
+                          : "You'll be redirected to Razorpay's secure checkout to pay via UPI, card, or netbanking."}
                       </p>
                       <Button
                         className="w-full"

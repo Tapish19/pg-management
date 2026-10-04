@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { demoPages } from "@/lib/demo-store";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useAuth } from "@/lib/auth";
@@ -11,12 +12,15 @@ export const Route = createFileRoute("/_app")({
 });
 
 function AppLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, isDemo } = useAuth();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const allowed = !isDemo || !user || demoPages[user.role].includes(pathname.replace(/\/$/, ""));
   const navigate = useNavigate();
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
-  }, [loading, user, navigate]);
-  if (loading || !user) {
+    else if (!loading && !allowed) navigate({ to: "/dashboard" });
+  }, [loading, user, allowed, navigate]);
+  if (loading || !user || !allowed) {
     return (
       <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">
         Loading…

@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Send, Bot, User, AlertTriangle } from "lucide-react";
-import { askAssistantFn } from "@/lib/api/functions/assistant-fns";
-import { createMyComplaint } from "@/lib/api/functions/tenant-fns";
+import { askAssistantFn } from "@/lib/demo-api";
+import { createMyComplaint } from "@/lib/demo-api";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
