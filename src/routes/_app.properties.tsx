@@ -14,13 +14,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Building2, Plus, Search } from "lucide-react";
-import { listOwnerProperties, createProperty } from "@/lib/api/functions/properties-fns";
+import {
+  listOwnerProperties,
+  createProperty,
+  updateProperty,
+} from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/properties")({ component: PropertiesPage });
+type EditableProperty = Awaited<ReturnType<typeof listOwnerProperties>>[number];
 
 function formatCurrency(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
@@ -29,6 +40,7 @@ function formatCurrency(n: number) {
 function PropertiesPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<EditableProperty | null>(null);
   const queryClient = useQueryClient();
 
   const { data: properties, isLoading } = useQuery({
@@ -37,7 +49,7 @@ function PropertiesPage() {
   });
 
   const filtered = (properties ?? []).filter((p) =>
-    `${p.name} ${p.city} ${p.locality}`.toLowerCase().includes(search.toLowerCase())
+    `${p.name} ${p.city} ${p.locality}`.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -111,11 +123,18 @@ function PropertiesPage() {
                   <Badge variant="secondary" className="capitalize">
                     {p.genderType}
                   </Badge>
-                  {p.minRent != null && <Badge variant="outline">From {formatCurrency(p.minRent)}</Badge>}
+                  {p.minRent != null && (
+                    <Badge variant="outline">From {formatCurrency(p.minRent)}</Badge>
+                  )}
                 </div>
                 <div className="mt-4 flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditing(p)}>
+                    Edit
+                  </Button>
                   <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link to="/rooms" search={{ propertyId: p.id }}>Rooms</Link>
+                    <Link to="/rooms" search={{ propertyId: p.id }}>
+                      Rooms
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -123,6 +142,36 @@ function PropertiesPage() {
           ))}
         </div>
       )}
+      <Dialog
+        open={!!editing}
+        onOpenChange={(value) => {
+          if (!value) setEditing(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit property</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <NewPropertyForm
+              key={editing.id}
+              initial={editing}
+              onCreated={() => {
+                setEditing(null);
+                for (const key of [
+                  "properties",
+                  "owner-room-matches",
+                  "bookings",
+                  "tenants",
+                  "my-booking",
+                  "reports",
+                ])
+                  queryClient.invalidateQueries({ queryKey: [key] });
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -136,35 +185,43 @@ function Stat({ n, l }: { n: number; l: string }) {
   );
 }
 
-function NewPropertyForm({ onCreated }: { onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [city, setCity] = useState("");
-  const [locality, setLocality] = useState("");
-  const [address, setAddress] = useState("");
-  const [description, setDescription] = useState("");
-  const [genderType, setGenderType] = useState<"male" | "female" | "co-ed">("male");
-  const [amenities, setAmenities] = useState("");
+function NewPropertyForm({
+  onCreated,
+  initial,
+}: {
+  onCreated: () => void;
+  initial?: EditableProperty;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [city, setCity] = useState(initial?.city ?? "");
+  const [locality, setLocality] = useState(initial?.locality ?? "");
+  const [address, setAddress] = useState(initial?.address ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [genderType, setGenderType] = useState<"male" | "female" | "co-ed">(
+    (initial?.genderType as "male" | "female" | "co-ed") ?? "male",
+  );
+  const [amenities, setAmenities] = useState(initial?.amenities.join(", ") ?? "");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await createProperty({
-        data: {
-          name,
-          city,
-          locality,
-          address,
-          description: description || undefined,
-          genderType,
-          amenities: amenities
-            .split(",")
-            .map((a) => a.trim())
-            .filter(Boolean),
-        },
-      });
-      toast.success("Property created");
+      const data = {
+        name,
+        city,
+        locality,
+        address,
+        description,
+        genderType,
+        amenities: amenities
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean),
+      };
+      if (initial) await updateProperty({ data: { id: initial.id, ...data } });
+      else await createProperty({ data });
+      toast.success(initial ? "Property updated" : "Property created");
       onCreated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create property");
@@ -212,10 +269,14 @@ function NewPropertyForm({ onCreated }: { onCreated: () => void }) {
       </div>
       <div>
         <Label className="mb-1.5 block">Amenities (comma separated)</Label>
-        <Input value={amenities} onChange={(e) => setAmenities(e.target.value)} placeholder="WiFi, Food, AC" />
+        <Input
+          value={amenities}
+          onChange={(e) => setAmenities(e.target.value)}
+          placeholder="WiFi, Food, AC"
+        />
       </div>
       <Button type="submit" className="w-full" disabled={submitting}>
-        {submitting ? "Creating…" : "Create property"}
+        {submitting ? "Saving…" : initial ? "Save changes" : "Create property"}
       </Button>
     </form>
   );

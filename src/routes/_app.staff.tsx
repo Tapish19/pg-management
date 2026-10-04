@@ -13,7 +13,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusPill, statusTone } from "@/components/ui-ext/stat";
 import {
   Table,
@@ -25,7 +31,12 @@ import {
 } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus } from "lucide-react";
-import { listOwnerStaff, createStaff, updateStaffStatus } from "@/lib/api/functions/staff-fns";
+import {
+  listOwnerStaff,
+  createStaff,
+  updateStaffStatus,
+  updateStaff,
+} from "@/lib/api/functions/staff-fns";
 import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { toast } from "sonner";
 
@@ -37,6 +48,9 @@ function formatCurrency(n: number) {
 
 function StaffPage() {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Awaited<ReturnType<typeof listOwnerStaff>>[number] | null>(
+    null,
+  );
   const queryClient = useQueryClient();
 
   const { data: staffList, isLoading } = useQuery({
@@ -51,7 +65,9 @@ function StaffPage() {
 
   async function toggleStatus(id: string, current: string) {
     try {
-      await updateStaffStatus({ data: { id, status: current === "active" ? "on-leave" : "active" } });
+      await updateStaffStatus({
+        data: { id, status: current === "active" ? "on-leave" : "active" },
+      });
       queryClient.invalidateQueries({ queryKey: ["staff", "mine"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update status");
@@ -97,18 +113,19 @@ function StaffPage() {
                 <TableHead>Salary</TableHead>
                 <TableHead>Attendance</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : !staffList || staffList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No staff yet. Add your first team member.
                   </TableCell>
                 </TableRow>
@@ -141,6 +158,11 @@ function StaffPage() {
                         <StatusPill tone={statusTone(s.status)}>{s.status}</StatusPill>
                       </button>
                     </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="outline" onClick={() => setEditing(s)}>
+                        Edit
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -148,6 +170,30 @@ function StaffPage() {
           </Table>
         </div>
       </Card>
+      <Dialog
+        open={!!editing}
+        onOpenChange={(value) => {
+          if (!value) setEditing(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit staff member</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <NewStaffForm
+              key={editing.id}
+              initial={editing}
+              properties={properties || []}
+              onCreated={() => {
+                setEditing(null);
+                queryClient.invalidateQueries({ queryKey: ["staff"] });
+                queryClient.invalidateQueries({ queryKey: ["complaints"] });
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -155,24 +201,35 @@ function StaffPage() {
 function NewStaffForm({
   properties,
   onCreated,
+  initial,
 }: {
   properties: { id: string; name: string }[];
   onCreated: () => void;
+  initial?: Awaited<ReturnType<typeof listOwnerStaff>>[number];
 }) {
-  const [propertyId, setPropertyId] = useState(properties[0]?.id ?? "");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState<"manager" | "cook" | "housekeeping" | "security" | "maintenance">("manager");
-  const [phone, setPhone] = useState("");
-  const [shift, setShift] = useState<"morning" | "evening" | "night">("morning");
-  const [salary, setSalary] = useState("");
+  const [propertyId, setPropertyId] = useState(initial?.propertyId ?? properties[0]?.id ?? "");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [role, setRole] = useState<
+    "manager" | "cook" | "housekeeping" | "security" | "maintenance"
+  >(
+    (initial?.role as "manager" | "cook" | "housekeeping" | "security" | "maintenance") ??
+      "manager",
+  );
+  const [phone, setPhone] = useState(initial?.phone ?? "");
+  const [shift, setShift] = useState<"morning" | "evening" | "night">(
+    (initial?.shift as "morning" | "evening" | "night") ?? "morning",
+  );
+  const [salary, setSalary] = useState(initial ? String(initial.salary) : "");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await createStaff({ data: { propertyId, name, role, phone, shift, salary: Number(salary || 0) } });
-      toast.success("Staff added");
+      const details = { name, role, phone, shift, salary: Number(salary || 0) };
+      if (initial) await updateStaff({ data: { id: initial.id, ...details } });
+      else await createStaff({ data: { propertyId, ...details } });
+      toast.success(initial ? "Staff updated" : "Staff added");
       onCreated();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add staff");
@@ -182,14 +239,18 @@ function NewStaffForm({
   }
 
   if (properties.length === 0) {
-    return <p className="text-sm text-muted-foreground">Add a property first, then come back to add staff.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        Add a property first, then come back to add staff.
+      </p>
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <Label className="mb-1.5 block">Property</Label>
-        <Select value={propertyId} onValueChange={setPropertyId}>
+        <Select value={propertyId} disabled={!!initial} onValueChange={setPropertyId}>
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -243,11 +304,17 @@ function NewStaffForm({
         </div>
         <div>
           <Label className="mb-1.5 block">Salary (₹/mo)</Label>
-          <Input type="number" min={0} value={salary} onChange={(e) => setSalary(e.target.value)} required />
+          <Input
+            type="number"
+            min={0}
+            value={salary}
+            onChange={(e) => setSalary(e.target.value)}
+            required
+          />
         </div>
       </div>
       <Button type="submit" className="w-full" disabled={submitting}>
-        {submitting ? "Adding…" : "Add staff"}
+        {submitting ? "Saving…" : initial ? "Save changes" : "Add staff"}
       </Button>
     </form>
   );

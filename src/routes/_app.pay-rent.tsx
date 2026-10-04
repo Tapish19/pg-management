@@ -18,6 +18,7 @@ import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { getMyBooking, getMyPayments } from "@/lib/api/functions/tenant-fns";
 import { createPaymentOrder, verifyPayment } from "@/lib/api/functions/payments-fns";
+import { rentDueDate } from "@/lib/owner-settings";
 
 export const Route = createFileRoute("/_app/pay-rent")({ component: PayRentPage });
 
@@ -56,7 +57,13 @@ function PayRentPage() {
   const amount = booking?.booking?.monthlyRent ?? 0;
   const rentMonth = new Date().toISOString().slice(0, 7);
   const eligible = !!booking?.booking && ["active", "confirmed"].includes(booking.booking.status);
-  const alreadyPaid = (paymentHistory ?? []).some((p) => p.bookingId === booking?.booking?.id && p.type === "rent" && p.month === rentMonth && p.status === "paid");
+  const alreadyPaid = (paymentHistory ?? []).some(
+    (p) =>
+      p.bookingId === booking?.booking?.id &&
+      p.type === "rent" &&
+      p.month === rentMonth &&
+      p.status === "paid",
+  );
 
   async function handlePay() {
     if (!booking?.booking || !eligible || alreadyPaid) return;
@@ -143,7 +150,9 @@ function PayRentPage() {
           <Card className="p-5 mb-4">
             <div className="flex justify-between items-start flex-wrap gap-4">
               <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">Monthly rent</div>
+                <div className="text-xs text-muted-foreground uppercase tracking-wider">
+                  Monthly rent
+                </div>
                 <div className="text-3xl font-bold mt-1">{formatCurrency(amount)}</div>
                 <div className="text-sm text-muted-foreground mt-1">
                   Room {booking.room?.roomNumber} · {booking.property?.name}
@@ -157,7 +166,16 @@ function PayRentPage() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="lg" disabled={!eligible || alreadyPaid || paymentsLoading || !paymentHistory}>{alreadyPaid ? "Paid this month" : eligible ? `Pay ${formatCurrency(amount)}` : "Awaiting booking confirmation"}</Button>
+                  <Button
+                    size="lg"
+                    disabled={!eligible || alreadyPaid || paymentsLoading || !paymentHistory}
+                  >
+                    {alreadyPaid
+                      ? "Paid this month"
+                      : eligible
+                        ? `Pay ${formatCurrency(amount)}`
+                        : "Awaiting booking confirmation"}
+                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
@@ -169,7 +187,11 @@ function PayRentPage() {
                         You'll be redirected to Razorpay's secure checkout to pay via UPI, card, or
                         netbanking.
                       </p>
-                      <Button className="w-full" disabled={paying || !eligible || alreadyPaid || paymentsLoading} onClick={handlePay}>
+                      <Button
+                        className="w-full"
+                        disabled={paying || !eligible || alreadyPaid || paymentsLoading}
+                        onClick={handlePay}
+                      >
                         {paying ? "Starting…" : `Pay ${formatCurrency(amount)}`}
                       </Button>
                     </div>
@@ -190,7 +212,9 @@ function PayRentPage() {
               {paymentsLoading ? (
                 <div className="p-6 text-center text-muted-foreground text-sm">Loading…</div>
               ) : (paymentHistory || []).length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground text-sm">No payments yet.</div>
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  No payments yet.
+                </div>
               ) : (
                 (paymentHistory || []).map((p) => (
                   <div key={p.id} className="p-4 flex items-center justify-between flex-wrap gap-2">
@@ -216,10 +240,44 @@ function PayRentPage() {
           <div className="space-y-1.5 text-sm">
             <Row l="Monthly rent" v={formatCurrency(booking.booking.monthlyRent)} />
             <Row l="Deposit required" v={formatCurrency(booking.booking.depositAmount)} />
-            <Row l="Deposit paid" v={paymentsLoading ? "Loading..." : formatCurrency((paymentHistory ?? [])
-              .filter((p) => p.bookingId === booking.booking.id && p.type === "deposit" && p.status === "paid")
-              .reduce((sum, p) => sum + p.amount, 0))} />
+            <Row
+              l="Deposit paid"
+              v={
+                paymentsLoading
+                  ? "Loading..."
+                  : formatCurrency(
+                      (paymentHistory ?? [])
+                        .filter(
+                          (p) =>
+                            p.bookingId === booking.booking.id &&
+                            p.type === "deposit" &&
+                            p.status === "paid",
+                        )
+                        .reduce((sum, p) => sum + p.amount, 0),
+                    )
+              }
+            />
             <Row l="Move-in" v={booking.booking.checkInDate} />
+            {booking.policy && (
+              <>
+                <Row l="Rent due" v={rentDueDate(rentMonth, booking.policy.dueDay)} />
+                <Row
+                  l="Late fee policy"
+                  v={`${formatCurrency(booking.policy.lateFeePerDay)}/day`}
+                />
+                <Row l="Notice period" v={`${booking.policy.noticePeriodDays} days`} />
+                <Row l="Organization" v={booking.policy.organizationName} />
+                <a
+                  className="block text-primary underline"
+                  href={`mailto:${booking.policy.contactEmail}`}
+                >
+                  Contact your PG owner
+                </a>
+                <p className="text-xs text-muted-foreground">
+                  Late fees are collected separately from monthly rent.
+                </p>
+              </>
+            )}
           </div>
           <Badge variant="secondary" className="mt-3">
             Booking status: {booking.booking.status}

@@ -6,10 +6,79 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { getOwnerSettings, updateOwnerSettings } from "@/lib/api/functions/settings-fns";
+import { toast } from "sonner";
+import type { NotificationPreferences } from "@/lib/owner-settings";
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
 function SettingsPage() {
+  const { user, isDemo } = useAuth();
+  const enabled = user?.role === "admin" && !isDemo;
+  const query = useQuery({
+    queryKey: ["owner-settings", user?.id],
+    queryFn: () => getOwnerSettings(),
+    enabled,
+  });
+  if (!enabled)
+    return (
+      <>
+        <PageHeader title="Settings" description="Manage your organization." />
+        <Card className="p-6">Sign in with a real owner account to manage settings.</Card>
+      </>
+    );
+  if (query.isLoading) return <PageHeader title="Settings" description="Loading settings…" />;
+  if (query.isError || !query.data)
+    return (
+      <Card className="p-6">
+        Could not load settings. <Button onClick={() => query.refetch()}>Retry</Button>
+      </Card>
+    );
+  return <SettingsEditor key={user.id} initial={query.data} />;
+}
+
+function SettingsEditor({ initial }: { initial: Awaited<ReturnType<typeof getOwnerSettings>> }) {
+  const [settings, setSettings] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+  async function save(section: "organization" | "rent" | "notifications") {
+    setSaving(true);
+    try {
+      if (section === "organization")
+        await updateOwnerSettings({
+          data: {
+            section,
+            values: {
+              organizationName: settings.organizationName,
+              contactEmail: settings.contactEmail,
+              gstNumber: settings.gstNumber,
+            },
+          },
+        });
+      else if (section === "rent")
+        await updateOwnerSettings({
+          data: {
+            section,
+            values: {
+              dueDay: settings.dueDay,
+              lateFeePerDay: settings.lateFeePerDay,
+              noticePeriodDays: settings.noticePeriodDays,
+            },
+          },
+        });
+      else await updateOwnerSettings({ data: { section, values: settings.notifications } });
+      for (const key of ["owner-settings", "owner-notifications", "my-booking"])
+        await queryClient.invalidateQueries({ queryKey: [key] });
+      toast.success("Settings saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save settings");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <>
       <PageHeader title="Settings" description="Organization, payments, notifications & roles." />
@@ -25,34 +94,79 @@ function SettingsPage() {
           <Card className="p-6 max-w-2xl space-y-4">
             <div>
               <Label className="mb-1.5 block">Organization name</Label>
-              <Input defaultValue="PG One Bengaluru" />
+              <Input
+                value={settings.organizationName}
+                onChange={(e) => setSettings({ ...settings, organizationName: e.target.value })}
+                maxLength={120}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">Contact email</Label>
-              <Input defaultValue="admin@pgone.demo" />
+              <Input
+                type="email"
+                value={settings.contactEmail}
+                onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">GST number (optional)</Label>
-              <Input placeholder="29ABCDE1234F1Z5" />
+              <Input
+                placeholder="29ABCDE1234F1Z5"
+                maxLength={15}
+                value={settings.gstNumber}
+                onChange={(e) =>
+                  setSettings({ ...settings, gstNumber: e.target.value.toUpperCase() })
+                }
+              />
             </div>
-            <Button>Save changes</Button>
+            <Button disabled={saving} onClick={() => save("organization")}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </Card>
         </TabsContent>
         <TabsContent value="rent" className="mt-4">
           <Card className="p-6 max-w-2xl space-y-4">
             <div>
               <Label className="mb-1.5 block">Rent due day of month</Label>
-              <Input type="number" defaultValue={5} />
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={settings.dueDay}
+                onChange={(e) => setSettings({ ...settings, dueDay: Number(e.target.value) })}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">Late fee (₹/day)</Label>
-              <Input type="number" defaultValue={100} />
+              <Input
+                type="number"
+                min={0}
+                max={10000}
+                value={settings.lateFeePerDay}
+                onChange={(e) =>
+                  setSettings({ ...settings, lateFeePerDay: Number(e.target.value) })
+                }
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">Notice period (days)</Label>
-              <Input type="number" defaultValue={30} />
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={settings.noticePeriodDays}
+                onChange={(e) =>
+                  setSettings({ ...settings, noticePeriodDays: Number(e.target.value) })
+                }
+              />
             </div>
-            <Button>Save changes</Button>
+            <p className="text-sm text-muted-foreground">
+              Residents can view this policy. Rent reminders use the due day. Late fees require
+              separate collection.
+            </p>
+            <Button disabled={saving} onClick={() => save("rent")}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </Card>
         </TabsContent>
         <TabsContent value="payments" className="mt-4">
@@ -94,17 +208,32 @@ function SettingsPage() {
         <TabsContent value="notify" className="mt-4">
           <Card className="p-6 max-w-2xl space-y-4">
             {[
-              "Rent due reminders",
-              "Payment received",
-              "New bookings",
-              "Complaint updates",
-              "Visitor check-ins",
-            ].map((n) => (
-              <div key={n} className="flex items-center justify-between">
-                <div className="font-medium">{n}</div>
-                <Switch defaultChecked />
+              ["rent", "Rent due reminders"],
+              ["payments", "Payment received"],
+              ["bookings", "New bookings"],
+              ["complaints", "Complaint updates"],
+              ["visitors", "Visitor check-ins"],
+            ].map(([key, label]) => (
+              <div key={key} className="flex items-center justify-between">
+                <div className="font-medium">{label}</div>
+                <Switch
+                  aria-label={label}
+                  checked={settings.notifications[key as keyof NotificationPreferences]}
+                  onCheckedChange={(checked) =>
+                    setSettings({
+                      ...settings,
+                      notifications: { ...settings.notifications, [key]: checked },
+                    })
+                  }
+                />
               </div>
             ))}
+            <p className="text-sm text-muted-foreground">
+              Choose which events appear in your notification feed and bell.
+            </p>
+            <Button disabled={saving} onClick={() => save("notifications")}>
+              {saving ? "Saving…" : "Save preferences"}
+            </Button>
           </Card>
         </TabsContent>
         <TabsContent value="roles" className="mt-4">

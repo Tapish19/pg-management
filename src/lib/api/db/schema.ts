@@ -12,9 +12,24 @@ export const owners = sqliteTable("owners", {
 });
 
 // PG Properties
+export const ownerSettings = sqliteTable("owner_settings", {
+  ownerId: text("owner_id")
+    .primaryKey()
+    .references(() => owners.id),
+  organizationName: text("organization_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  gstNumber: text("gst_number").notNull().default(""),
+  dueDay: integer("due_day").notNull().default(5),
+  lateFeePerDay: real("late_fee_per_day").notNull().default(0),
+  noticePeriodDays: integer("notice_period_days").notNull().default(30),
+  notificationPreferences: text("notification_preferences").notNull().default("{}"),
+});
+
 export const properties = sqliteTable("properties", {
   id: text("id").primaryKey(),
-  ownerId: text("owner_id").notNull().references(() => owners.id),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => owners.id),
   name: text("name").notNull(),
   city: text("city").notNull(),
   locality: text("locality").notNull(),
@@ -29,7 +44,9 @@ export const properties = sqliteTable("properties", {
 // Rooms/Beds within a property
 export const rooms = sqliteTable("rooms", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   roomNumber: text("room_number").notNull(),
   sharingType: text("sharing_type").notNull(), // 'single' | 'double' | 'triple' | 'dormitory'
   totalBeds: integer("total_beds").notNull().default(1),
@@ -58,7 +75,10 @@ export const tenants = sqliteTable("tenants", {
 // Tenant lifestyle preference survey — powers the roommate/room compatibility engine
 export const tenantPreferences = sqliteTable("tenant_preferences", {
   id: text("id").primaryKey(),
-  tenantId: text("tenant_id").notNull().unique().references(() => tenants.id),
+  tenantId: text("tenant_id")
+    .notNull()
+    .unique()
+    .references(() => tenants.id),
   sleepSchedule: text("sleep_schedule").notNull().default("flexible"), // early_bird | night_owl | flexible
   cleanliness: integer("cleanliness").notNull().default(3), // 1 (relaxed) - 5 (very tidy)
   noiseTolerance: integer("noise_tolerance").notNull().default(3), // 1 (needs quiet) - 5 (doesn't mind noise)
@@ -73,7 +93,9 @@ export const tenantPreferences = sqliteTable("tenant_preferences", {
 // Staff members employed at a property
 export const staff = sqliteTable("staff", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   name: text("name").notNull(),
   role: text("role").notNull(), // manager | cook | housekeeping | security | maintenance
   phone: text("phone").notNull(),
@@ -87,7 +109,9 @@ export const staff = sqliteTable("staff", {
 // Maintenance / service complaints raised by tenants
 export const complaints = sqliteTable("complaints", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   tenantId: text("tenant_id").references(() => tenants.id),
   roomNumber: text("room_number"),
   category: text("category").notNull().default("other"), // plumbing | electrical | wifi | cleaning | food | other
@@ -101,7 +125,9 @@ export const complaints = sqliteTable("complaints", {
 // Visitor log (guests visiting tenants)
 export const visitors = sqliteTable("visitors", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   tenantId: text("tenant_id").references(() => tenants.id),
   name: text("name").notNull(),
   purpose: text("purpose"),
@@ -114,7 +140,9 @@ export const visitors = sqliteTable("visitors", {
 // Notices posted by owner/staff to tenants
 export const notices = sqliteTable("notices", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   title: text("title").notNull(),
   body: text("body").notNull(),
   audience: text("audience").notNull().default("All tenants"),
@@ -125,9 +153,15 @@ export const notices = sqliteTable("notices", {
 // Bookings
 export const bookings = sqliteTable("bookings", {
   id: text("id").primaryKey(),
-  roomId: text("room_id").notNull().references(() => rooms.id),
-  propertyId: text("property_id").notNull().references(() => properties.id),
-  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  roomId: text("room_id")
+    .notNull()
+    .references(() => rooms.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
+  tenantId: text("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
   checkInDate: text("check_in_date").notNull(),
   checkOutDate: text("check_out_date"),
   monthlyRent: real("monthly_rent").notNull(),
@@ -139,7 +173,9 @@ export const bookings = sqliteTable("bookings", {
 // Payments (deposit, monthly rent, services)
 export const payments = sqliteTable("payments", {
   id: text("id").primaryKey(),
-  bookingId: text("booking_id").notNull().references(() => bookings.id),
+  bookingId: text("booking_id")
+    .notNull()
+    .references(() => bookings.id),
   amount: real("amount").notNull(),
   type: text("type").notNull(), // deposit | rent | service | refund
   month: text("month"), // e.g. '2026-07' for rent payments
@@ -153,7 +189,9 @@ export const payments = sqliteTable("payments", {
 // Expenses logged against a property
 export const expenses = sqliteTable("expenses", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   category: text("category").notNull().default("misc"), // utilities | salary | food | maintenance | supplies | misc
   vendor: text("vendor").notNull(),
   date: text("date").notNull(),
@@ -165,7 +203,9 @@ export const expenses = sqliteTable("expenses", {
 // Weekly food menu per property (one row per day)
 export const foodMenu = sqliteTable("food_menu", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   day: text("day").notNull(), // Monday..Sunday
   breakfast: text("breakfast").notNull().default(""),
   lunch: text("lunch").notNull().default(""),
@@ -175,7 +215,9 @@ export const foodMenu = sqliteTable("food_menu", {
 // Services (food, laundry, cleaning etc offered as add-ons)
 export const services = sqliteTable("services", {
   id: text("id").primaryKey(),
-  propertyId: text("property_id").notNull().references(() => properties.id),
+  propertyId: text("property_id")
+    .notNull()
+    .references(() => properties.id),
   name: text("name").notNull(),
   price: real("price").notNull(),
   billingCycle: text("billing_cycle").notNull().default("monthly"), // monthly | one_time

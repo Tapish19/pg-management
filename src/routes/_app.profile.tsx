@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth";
-import { Upload, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getMyKyc } from "@/lib/api/functions/kyc-fns";
 
 export const Route = createFileRoute("/_app/profile")({ component: ProfilePage });
 
@@ -17,7 +19,16 @@ function ProfilePage() {
   const { user, isDemo, updateProfile } = useAuth();
   const [details, setDetails] = useState({ name: "", email: "", phone: "" });
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (user) setDetails({ name: user.name, email: user.email, phone: user.phone ?? "" }); }, [user]);
+  const resident = user?.role === "tenant" && !isDemo;
+  const kyc = useQuery({
+    queryKey: ["my-kyc", user?.id],
+    queryFn: () => getMyKyc(),
+    enabled: resident,
+    refetchInterval: 30_000,
+  });
+  useEffect(() => {
+    if (user) setDetails({ name: user.name, email: user.email, phone: user.phone ?? "" });
+  }, [user]);
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -26,7 +37,9 @@ function ProfilePage() {
       toast.success("Profile updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save profile");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   }
   if (!user) return null;
   const initials = user.name
@@ -54,48 +67,78 @@ function ProfilePage() {
           <form onSubmit={handleSave} className="mt-6 space-y-3">
             <div>
               <Label className="mb-1.5 block">Full name</Label>
-              <Input required minLength={2} maxLength={100} value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} />
+              <Input
+                required
+                minLength={2}
+                maxLength={100}
+                value={details.name}
+                onChange={(e) => setDetails({ ...details, name: e.target.value })}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">Email</Label>
-              <Input required type="email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} />
+              <Input
+                required
+                type="email"
+                value={details.email}
+                onChange={(e) => setDetails({ ...details, email: e.target.value })}
+              />
             </div>
             <div>
               <Label className="mb-1.5 block">Phone</Label>
-              <Input type="tel" required={user.role === "tenant"} maxLength={30} value={details.phone} onChange={(e) => setDetails({ ...details, phone: e.target.value })} />
+              <Input
+                type="tel"
+                required={user.role === "tenant"}
+                maxLength={30}
+                value={details.phone}
+                onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+              />
             </div>
-            <Button type="submit" disabled={saving || isDemo}>{saving ? "Saving…" : "Save changes"}</Button>
-            {isDemo && <p className="text-sm text-muted-foreground">Sign in to a real account to save profile changes.</p>}
+            <Button type="submit" disabled={saving || isDemo}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+            {isDemo && (
+              <p className="text-sm text-muted-foreground">
+                Sign in to a real account to save profile changes.
+              </p>
+            )}
           </form>
         </Card>
 
         <Card className="p-6">
-          <div className="font-semibold mb-3">KYC documents</div>
-          {[
-            { name: "Aadhaar card", status: "verified" },
-            { name: "PAN card", status: "verified" },
-            { name: "Rental agreement", status: "pending" },
-          ].map((d) => (
-            <div
-              key={d.name}
-              className="flex items-center justify-between border rounded-lg p-3 mb-2"
-            >
-              <div className="flex items-center gap-2">
-                <CheckCircle2
-                  className={`h-4 w-4 ${d.status === "verified" ? "text-success" : "text-warning"}`}
-                />
-                <span className="text-sm font-medium">{d.name}</span>
-              </div>
-              <Badge variant="outline" className="capitalize">
-                {d.status}
-              </Badge>
+          <div className="font-semibold mb-3">KYC status</div>
+          {!resident ? (
+            <p className="text-sm text-muted-foreground">
+              KYC details are available for resident accounts.
+            </p>
+          ) : kyc.isLoading ? (
+            <p>Loading KYC status…</p>
+          ) : kyc.isError ? (
+            <div role="alert">
+              Could not load KYC status. <Button onClick={() => kyc.refetch()}>Retry</Button>
             </div>
-          ))}
-          <div className="rounded-lg border-2 border-dashed p-6 text-center mt-3">
-            <Upload className="h-5 w-5 mx-auto text-muted-foreground" />
-            <div className="text-sm mt-2">Upload new document</div>
-            <div className="text-xs text-muted-foreground">JPG, PNG or PDF — up to 5 MB</div>
-          </div>
+          ) : (
+            kyc.data && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2
+                    className={
+                      kyc.data.status === "verified" ? "text-success" : "text-muted-foreground"
+                    }
+                  />
+                  <Badge variant="outline" className="capitalize">
+                    {kyc.data.status}
+                  </Badge>
+                </div>
+                <p className="text-sm">ID proof: {kyc.data.proofType || "Not recorded"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {kyc.data.hasProofDetails
+                    ? "Your ID proof details are recorded with your PG owner."
+                    : "Contact your PG owner to submit your ID proof details."}
+                </p>
+              </div>
+            )
+          )}
         </Card>
       </div>
     </>

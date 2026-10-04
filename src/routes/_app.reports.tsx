@@ -31,27 +31,44 @@ function ReportsPage() {
 
   return (
     <>
-      <PageHeader title="Reports" description="Operational and financial insights, computed from live data." />
+      <PageHeader
+        title="Reports"
+        description="Operational and financial insights, computed from live data."
+      />
 
       {error ? (
         <Card className="p-6 space-y-3">
-          <p role="alert" className="text-sm text-destructive">Could not load reports. {error.message}</p>
-          <button className="text-sm text-primary underline" onClick={() => refetch()}>Try again</button>
+          <p role="alert" className="text-sm text-destructive">
+            Could not load reports. {error.message}
+          </p>
+          <button className="text-sm text-primary underline" onClick={() => refetch()}>
+            Try again
+          </button>
         </Card>
       ) : isLoading || !data ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-            <StatCard label="Total revenue collected" value={formatCurrency(data.totalRevenue)} tone="success" />
+            <StatCard
+              label="Total revenue collected"
+              value={formatCurrency(data.totalRevenue)}
+              tone="success"
+            />
             <StatCard label="Current occupancy" value={`${data.avgOccupancyPct}%`} tone="info" />
-            <StatCard label="Collection rate" value={`${data.collectionRate}%`} tone="success" />
+            <StatCard
+              label="Rent collected this month"
+              value={`${data.collectionRate}%`}
+              tone="success"
+            />
             <StatCard label="Open complaints" value={data.openComplaints} tone="default" />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="p-5">
               <div className="font-semibold mb-1">Occupancy by property</div>
-              <div className="text-xs text-muted-foreground mb-3">Beds occupied vs total, right now</div>
+              <div className="text-xs text-muted-foreground mb-3">
+                Beds occupied vs total, right now
+              </div>
               {data.occupancyByProperty.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">No properties yet.</p>
               ) : (
@@ -62,15 +79,29 @@ function ReportsPage() {
                     <YAxis fontSize={12} />
                     <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar isAnimationActive={false} dataKey="total" name="Total beds" fill="#94a3b8" radius={[6, 6, 0, 0]} />
-                    <Bar isAnimationActive={false} dataKey="occupied" name="Occupied" fill="#059669" radius={[6, 6, 0, 0]} />
+                    <Bar
+                      isAnimationActive={false}
+                      dataKey="total"
+                      name="Total beds"
+                      fill="#94a3b8"
+                      radius={[6, 6, 0, 0]}
+                    />
+                    <Bar
+                      isAnimationActive={false}
+                      dataKey="occupied"
+                      name="Occupied"
+                      fill="#059669"
+                      radius={[6, 6, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </Card>
             <Card className="p-5">
               <div className="font-semibold mb-1">Revenue vs expense</div>
-              <div className="text-xs text-muted-foreground mb-3">By month, from actual payments &amp; expenses</div>
+              <div className="text-xs text-muted-foreground mb-3">
+                By month, from actual payments &amp; expenses
+              </div>
               {data.revenueTrend.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-8 text-center">
                   No paid rent or logged expenses yet.
@@ -86,8 +117,20 @@ function ReportsPage() {
                       formatter={(v) => formatCurrency(Number(v))}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="revenue" stroke="#059669" strokeWidth={2} />
-                    <Line isAnimationActive={false} type="monotone" dataKey="expense" stroke="#dc2626" strokeWidth={2} />
+                    <Line
+                      isAnimationActive={false}
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#059669"
+                      strokeWidth={2}
+                    />
+                    <Line
+                      isAnimationActive={false}
+                      type="monotone"
+                      dataKey="expense"
+                      stroke="#dc2626"
+                      strokeWidth={2}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -101,7 +144,12 @@ function ReportsPage() {
                   <XAxis dataKey="stage" fontSize={12} />
                   <YAxis fontSize={12} />
                   <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-                  <Bar isAnimationActive={false} dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                  <Bar
+                    isAnimationActive={false}
+                    dataKey="count"
+                    fill="#2563eb"
+                    radius={[6, 6, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </Card>

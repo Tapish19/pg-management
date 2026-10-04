@@ -15,7 +15,11 @@ function requireSession() {
 // Owner: list all staff across their properties
 export const listOwnerStaff = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireSession();
-  const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+  const ownerProperties = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.ownerId, session.ownerId))
+    .all();
   const propertyIds = new Set(ownerProperties.map((p) => p.id));
   const all = await db.select().from(staff).all();
   return all.filter((s) => propertyIds.has(s.propertyId));
@@ -34,7 +38,11 @@ export const createStaff = createServerFn({ method: "POST" })
   .validator((input: unknown) => staffInput.parse(input))
   .handler(async ({ data }) => {
     const session = requireSession();
-    const property = await db.select().from(properties).where(eq(properties.id, data.propertyId)).get();
+    const property = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, data.propertyId))
+      .get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Property not found");
 
     const id = genId("staff");
@@ -44,16 +52,40 @@ export const createStaff = createServerFn({ method: "POST" })
 
 export const updateStaffStatus = createServerFn({ method: "POST" })
   .validator((input: unknown) =>
-    z.object({ id: z.string(), status: z.enum(["active", "on-leave"]) }).parse(input)
+    z.object({ id: z.string(), status: z.enum(["active", "on-leave"]) }).parse(input),
   )
   .handler(async ({ data }) => {
     const session = requireSession();
     const member = await db.select().from(staff).where(eq(staff.id, data.id)).get();
     if (!member) throw new Error("Not found");
-    const property = await db.select().from(properties).where(eq(properties.id, member.propertyId)).get();
+    const property = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, member.propertyId))
+      .get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
     await db.update(staff).set({ status: data.status }).where(eq(staff.id, data.id));
+    return { ok: true };
+  });
+
+export const updateStaff = createServerFn({ method: "POST" })
+  .validator((input: unknown) =>
+    staffInput.omit({ propertyId: true }).extend({ id: z.string() }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const session = requireSession();
+    const { id, ...details } = data;
+    const member = await db.select().from(staff).where(eq(staff.id, id)).get();
+    if (!member) throw new Error("Staff member not found");
+    const property = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, member.propertyId))
+      .get();
+    if (!property || property.ownerId !== session.ownerId)
+      throw new Error("Staff member not found");
+    await db.update(staff).set(details).where(eq(staff.id, id));
     return { ok: true };
   });
 
@@ -63,7 +95,11 @@ export const deleteStaff = createServerFn({ method: "POST" })
     const session = requireSession();
     const member = await db.select().from(staff).where(eq(staff.id, data.id)).get();
     if (!member) throw new Error("Not found");
-    const property = await db.select().from(properties).where(eq(properties.id, member.propertyId)).get();
+    const property = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, member.propertyId))
+      .get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
     await db.delete(staff).where(eq(staff.id, data.id));

@@ -2,10 +2,21 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { bookings, complaints, foodMenu, notices, payments, properties, rooms, tenants, visitors } from "../db/schema";
+import {
+  bookings,
+  complaints,
+  foodMenu,
+  notices,
+  payments,
+  properties,
+  rooms,
+  tenants,
+  visitors,
+} from "../db/schema";
 import { genId } from "../id";
 import { selectCurrentBooking } from "../../booking-selection";
 import { noticeVisibleToRoom } from "../../notice-audience";
+import { readOwnerSettings } from "./settings-fns";
 import {
   createTenantSessionToken,
   setTenantSessionCookie,
@@ -28,7 +39,9 @@ async function getPrimaryBooking(tenantId: string) {
 
 // Tenant sign-in: matches email + phone against an existing tenant record with a booking
 export const loginTenant = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ email: z.string().email(), phone: z.string().min(6) }).parse(input))
+  .validator((input: unknown) =>
+    z.object({ email: z.string().email(), phone: z.string().min(6) }).parse(input),
+  )
   .handler(async ({ data }) => {
     const email = data.email.trim().toLowerCase();
     const phone = data.phone.trim();
@@ -38,7 +51,9 @@ export const loginTenant = createServerFn({ method: "POST" })
     // normalized value we searched for plus every candidate whose email
     // matches (to isolate an email-vs-phone mismatch) without dumping the
     // full tenants table.
-    console.log(`[loginTenant] searching for email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`);
+    console.log(
+      `[loginTenant] searching for email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`,
+    );
     console.log(`[loginTenant] total tenants in db: ${allTenants.length}`);
     const emailMatches = allTenants.filter((t) => t.email.trim().toLowerCase() === email);
     if (emailMatches.length === 0) {
@@ -59,7 +74,11 @@ export const loginTenant = createServerFn({ method: "POST" })
     const booking = await getPrimaryBooking(match.id);
     if (!booking) throw new Error("No booking found for this resident yet");
 
-    const token = createTenantSessionToken({ tenantId: match.id, name: match.name, email: match.email });
+    const token = createTenantSessionToken({
+      tenantId: match.id,
+      name: match.name,
+      email: match.email,
+    });
     setTenantSessionCookie(token);
     clearSessionCookie();
     return { id: match.id, name: match.name, email: match.email, phone: match.phone };
@@ -69,7 +88,9 @@ export const getCurrentTenantSession = createServerFn({ method: "GET" }).handler
   const session = getTenantSession();
   if (!session) return null;
   const tenant = await db.select().from(tenants).where(eq(tenants.id, session.tenantId)).get();
-  return tenant ? { id: tenant.id, name: tenant.name, email: tenant.email, phone: tenant.phone } : null;
+  return tenant
+    ? { id: tenant.id, name: tenant.name, email: tenant.email, phone: tenant.phone }
+    : null;
 });
 
 export const logoutTenant = createServerFn({ method: "POST" }).handler(async () => {
@@ -83,9 +104,28 @@ export const getMyBooking = createServerFn({ method: "GET" }).handler(async () =
   const booking = await getPrimaryBooking(session.tenantId);
   if (!booking) return null;
   const room = await db.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();
-  const property = await db.select().from(properties).where(eq(properties.id, booking.propertyId)).get();
+  const property = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.id, booking.propertyId))
+    .get();
   const tenant = await db.select().from(tenants).where(eq(tenants.id, session.tenantId)).get();
-  return { booking, room, property, tenant };
+  const policy = property ? await readOwnerSettings(property.ownerId) : null;
+  return {
+    booking,
+    room,
+    property,
+    tenant,
+    policy: policy
+      ? {
+          organizationName: policy.organizationName,
+          contactEmail: policy.contactEmail,
+          dueDay: policy.dueDay,
+          lateFeePerDay: policy.lateFeePerDay,
+          noticePeriodDays: policy.noticePeriodDays,
+        }
+      : null,
+  };
 });
 
 // My complaints
@@ -164,17 +204,26 @@ export const getMyNotices = createServerFn({ method: "GET" }).handler(async () =
   const booking = await getPrimaryBooking(session.tenantId);
   if (!booking) return [];
   const room = await db.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();
-  return (await db.select().from(notices).where(eq(notices.propertyId, booking.propertyId)).all())
-    .filter((notice) => noticeVisibleToRoom(notice.audience, room?.roomNumber));
+  return (
+    await db.select().from(notices).where(eq(notices.propertyId, booking.propertyId)).all()
+  ).filter((notice) => noticeVisibleToRoom(notice.audience, room?.roomNumber));
 });
 
 // My payment / invoice history, across all my bookings
 export const getMyPayments = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireTenantSession();
-  const myBookings = await db.select().from(bookings).where(eq(bookings.tenantId, session.tenantId)).all();
+  const myBookings = await db
+    .select()
+    .from(bookings)
+    .where(eq(bookings.tenantId, session.tenantId))
+    .all();
   if (myBookings.length === 0) return [];
   const bookingIds = myBookings.map((b) => b.id);
-  const rows = await db.select().from(payments).where(inArray(payments.bookingId, bookingIds)).all();
+  const rows = await db
+    .select()
+    .from(payments)
+    .where(inArray(payments.bookingId, bookingIds))
+    .all();
   const bookingMap = new Map(myBookings.map((b) => [b.id, b]));
   return rows.map((p) => ({ ...p, booking: bookingMap.get(p.bookingId) }));
 });

@@ -1,5 +1,9 @@
 import { drizzle } from "drizzle-orm/libsql";
-import { migrate } from "drizzle-orm/libsql/migrator";
+import { migrateEmbedded } from "./migrate-embedded";
+import initialSql from "../../../../drizzle/0000_violet_manta.sql?raw";
+import settingsSql from "../../../../drizzle/0001_owner_settings.sql?raw";
+import initialSnapshot from "../../../../drizzle/meta/0000_snapshot.json";
+import journal from "../../../../drizzle/meta/_journal.json";
 import { createClient } from "@libsql/client";
 import * as schema from "./schema";
 import path from "path";
@@ -31,12 +35,17 @@ let migrationsReady: Promise<void> | null = null;
 
 export function ensureMigrated(): Promise<void> {
   if (!migrationsReady) {
-    migrationsReady = migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") }).catch(
-      (err) => {
-        migrationsReady = null; // allow retry on next request instead of caching a failure forever
-        throw err;
-      }
-    );
+    migrationsReady = migrateEmbedded(
+      client,
+      [
+        { sql: initialSql, when: journal.entries[0].when },
+        { sql: settingsSql, when: journal.entries[1].when },
+      ],
+      initialSnapshot,
+    ).catch((err) => {
+      migrationsReady = null; // allow retry on next request instead of caching a failure forever
+      throw err;
+    });
   }
   return migrationsReady;
 }

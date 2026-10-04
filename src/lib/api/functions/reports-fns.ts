@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { bookings, payments, properties, rooms, complaints, expenses } from "../db/schema";
 import { getSession } from "../auth";
+import { currentRentCollection } from "../../collection-rate";
 
 function requireSession() {
   const session = getSession();
@@ -13,10 +14,16 @@ function requireSession() {
 // Owner: aggregate real operational + financial stats for the reports page
 export const getOwnerReports = createServerFn({ method: "GET" }).handler(async () => {
   const session = requireSession();
-  const ownerProperties = await db.select().from(properties).where(eq(properties.ownerId, session.ownerId)).all();
+  const ownerProperties = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.ownerId, session.ownerId))
+    .all();
   const propertyIds = new Set(ownerProperties.map((p) => p.id));
 
-  const ownerRooms = (await db.select().from(rooms).all()).filter((r) => propertyIds.has(r.propertyId));
+  const ownerRooms = (await db.select().from(rooms).all()).filter((r) =>
+    propertyIds.has(r.propertyId),
+  );
   const totalBeds = ownerRooms.reduce((s, r) => s + r.totalBeds, 0);
   const occupiedBeds = ownerRooms.reduce((s, r) => s + r.occupiedBeds, 0);
   const occupancyByProperty = ownerProperties.map((p) => {
@@ -28,7 +35,9 @@ export const getOwnerReports = createServerFn({ method: "GET" }).handler(async (
     };
   });
 
-  const ownerBookings = (await db.select().from(bookings).all()).filter((b) => propertyIds.has(b.propertyId));
+  const ownerBookings = (await db.select().from(bookings).all()).filter((b) =>
+    propertyIds.has(b.propertyId),
+  );
   const bookingIds = new Set(ownerBookings.map((b) => b.id));
   const funnelOrder = ["pending", "confirmed", "active", "checked_out", "cancelled"] as const;
   const bookingFunnel = funnelOrder.map((stage) => ({
@@ -36,14 +45,23 @@ export const getOwnerReports = createServerFn({ method: "GET" }).handler(async (
     count: ownerBookings.filter((b) => b.status === stage).length,
   }));
 
-  const ownerPayments = (await db.select().from(payments).all()).filter((p) => bookingIds.has(p.bookingId));
+  const ownerPayments = (await db.select().from(payments).all()).filter((p) =>
+    bookingIds.has(p.bookingId),
+  );
   const paidPayments = ownerPayments.filter((p) => p.status === "paid");
   const totalRevenue = paidPayments.reduce((s, p) => s + p.amount, 0);
-  const totalInvoiced = ownerPayments.reduce((s, p) => s + p.amount, 0);
-  const collectionRate = totalInvoiced > 0 ? Math.round((totalRevenue / totalInvoiced) * 100) : 0;
+  const rentCollection = currentRentCollection(
+    ownerBookings,
+    ownerPayments,
+    new Date().toISOString().slice(0, 7),
+  );
+  const totalInvoiced = rentCollection.invoiced;
+  const collectionRate = rentCollection.rate;
 
   // Group revenue + expense by month (yyyy-mm)
-  const ownerExpenses = (await db.select().from(expenses).all()).filter((e) => propertyIds.has(e.propertyId) && e.status === "approved");
+  const ownerExpenses = (await db.select().from(expenses).all()).filter(
+    (e) => propertyIds.has(e.propertyId) && e.status === "approved",
+  );
   const monthKey = (d: string | null | undefined) => (d ? d.slice(0, 7) : "unknown");
   const monthMap = new Map<string, { month: string; revenue: number; expense: number }>();
   for (const p of paidPayments) {
@@ -62,8 +80,12 @@ export const getOwnerReports = createServerFn({ method: "GET" }).handler(async (
     .filter((r) => r.month !== "unknown")
     .sort((a, b) => (a.month < b.month ? -1 : 1));
 
-  const ownerComplaints = (await db.select().from(complaints).all()).filter((c) => propertyIds.has(c.propertyId));
-  const resolvedComplaints = ownerComplaints.filter((c) => c.status === "resolved" || c.status === "closed").length;
+  const ownerComplaints = (await db.select().from(complaints).all()).filter((c) =>
+    propertyIds.has(c.propertyId),
+  );
+  const resolvedComplaints = ownerComplaints.filter(
+    (c) => c.status === "resolved" || c.status === "closed",
+  ).length;
   const openComplaints = ownerComplaints.length - resolvedComplaints;
 
   return {
