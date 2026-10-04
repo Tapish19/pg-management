@@ -5,6 +5,7 @@ import { currentRentCollection } from "./collection-rate";
 import { noticeVisibleToRoom } from "./notice-audience";
 import { attendanceSummary } from "./staff-attendance";
 import { z } from "zod";
+import { readDemoPaymentMethods, type DemoPaymentMethod } from "./demo-payment-settings";
 import {
   computeCompatibility,
   preferencesInput,
@@ -881,6 +882,11 @@ export function demoCall(name: string, input: unknown = {}): unknown {
       };
     }
     case "verifyPayment": {
+      const methods = readDemoPaymentMethods();
+      const method =
+        text("method") || (Object.keys(methods) as DemoPaymentMethod[]).find((key) => methods[key]);
+      if (!method || !(method in methods) || !methods[method as DemoPaymentMethod])
+        throw new Error("This demo payment method is disabled. Enable a method in owner Settings.");
       const p = s.payments.find(
         (p) => p.id === text("paymentId") && p.bookingId === myBooking().id,
       );

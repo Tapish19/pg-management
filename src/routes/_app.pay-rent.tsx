@@ -20,6 +20,8 @@ import { getMyBooking, getMyPayments } from "@/lib/demo-api";
 import { createPaymentOrder, verifyPayment } from "@/lib/demo-api";
 import { rentDueDate } from "@/lib/owner-settings";
 import { useAuth } from "@/lib/auth";
+import { demoCall } from "@/lib/demo-store";
+import { readDemoPaymentMethods, type DemoPaymentMethod } from "@/lib/demo-payment-settings";
 
 export const Route = createFileRoute("/_app/pay-rent")({ component: PayRentPage });
 
@@ -46,6 +48,11 @@ function PayRentPage() {
   const [open, setOpen] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [demoMethods] = useState(() => {
+    const methods = readDemoPaymentMethods();
+    return (Object.keys(methods) as DemoPaymentMethod[]).filter((key) => methods[key]);
+  });
+  const [demoMethod, setDemoMethod] = useState<DemoPaymentMethod | "">(() => demoMethods[0] ?? "");
 
   const { data: booking, isLoading: bookingLoading } = useQuery({
     queryKey: ["my-booking"],
@@ -81,13 +88,9 @@ function PayRentPage() {
       });
 
       if (isDemo) {
-        await verifyPayment({
-          data: {
-            paymentId: order.paymentId,
-            razorpay_order_id: order.orderId,
-            razorpay_payment_id: "demo-payment",
-            razorpay_signature: "demo",
-          },
+        demoCall("verifyPayment", {
+          paymentId: order.paymentId,
+          method: demoMethod,
         });
         setPaid(true);
         toast.success("Demo payment completed. No money was charged.");
@@ -189,7 +192,13 @@ function PayRentPage() {
                 <DialogTrigger asChild>
                   <Button
                     size="lg"
-                    disabled={!eligible || alreadyPaid || paymentsLoading || !paymentHistory}
+                    disabled={
+                      !eligible ||
+                      alreadyPaid ||
+                      paymentsLoading ||
+                      !paymentHistory ||
+                      (isDemo && !demoMethods.length)
+                    }
                   >
                     {alreadyPaid
                       ? "Paid this month"
@@ -204,6 +213,25 @@ function PayRentPage() {
                   </DialogHeader>
                   {!paid ? (
                     <div className="space-y-4">
+                      {isDemo && (
+                        <label className="block text-sm font-medium">
+                          Demo payment method
+                          <select
+                            aria-label="Demo payment method"
+                            value={demoMethod}
+                            onChange={(e) => setDemoMethod(e.target.value as DemoPaymentMethod)}
+                            className="block mt-2 w-full rounded-md border bg-background p-2"
+                          >
+                            {demoMethods.map((method) => (
+                              <option key={method} value={method}>
+                                {method === "upi"
+                                  ? "UPI"
+                                  : method.charAt(0).toUpperCase() + method.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       <p className="text-sm text-muted-foreground">
                         {isDemo
                           ? "Complete a simulated rent payment. No checkout account is needed and no money will be charged."
@@ -227,6 +255,13 @@ function PayRentPage() {
               </Dialog>
             </div>
           </Card>
+
+          {isDemo && !demoMethods.length && (
+            <p role="alert" className="mb-4 text-sm text-muted-foreground">
+              The owner has disabled all demo payment methods. Switch to Owner / Admin and enable a
+              method in Settings → Payments.
+            </p>
+          )}
 
           <Card className="overflow-hidden">
             <div className="p-4 border-b font-semibold">Payment history</div>

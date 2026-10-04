@@ -146,6 +146,9 @@ try {
     }
     if (role === "admin") {
       await page.goto(`${base}/settings`);
+      await page.getByLabel("Organization name", { exact: true }).fill("x");
+      await page.getByRole("button", { name: "Save changes", exact: true }).click();
+      await page.getByRole("alert").filter({ hasText: "Organization name:" }).waitFor();
       await page
         .getByRole("tabpanel")
         .getByRole("textbox")
@@ -158,11 +161,50 @@ try {
         () =>
           document.querySelector('[role="tabpanel"] input')?.value === "Demo organization edited",
       );
+      await page.getByRole("tab", { name: "Rent rules", exact: true }).click();
+      await page.getByLabel("Rent due day of month", { exact: true }).fill("7");
+      await page.getByLabel("Late fee (₹/day)", { exact: true }).fill("12.50");
+      await page.getByLabel("Notice period (days)", { exact: true }).fill("45");
+      await page.getByRole("button", { name: "Save changes", exact: true }).click();
+      await page.waitForFunction(
+        () => JSON.parse(localStorage.getItem("pgone.demo.settings.v1.u-admin")).dueDay === 7,
+      );
+      await page.getByRole("tab", { name: "Notifications", exact: true }).click();
+      await page.getByRole("switch", { name: "Rent due reminders", exact: true }).click();
+      await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+      await page.waitForFunction(
+        () =>
+          JSON.parse(localStorage.getItem("pgone.demo.settings.v1.u-admin")).notifications.rent ===
+          false,
+      );
+      await page.getByRole("tab", { name: "Payments", exact: true }).click();
+      await page.getByRole("switch", { name: "cash", exact: true }).click();
+      await page.getByRole("button", { name: "Connect stripe demo", exact: true }).click();
+      await page.reload();
+      await page.getByRole("tab", { name: "Payments", exact: true }).click();
+      assert.equal(
+        await page.getByRole("switch", { name: "cash", exact: true }).getAttribute("data-state"),
+        "unchecked",
+      );
+      await page.getByRole("button", { name: "Disconnect stripe demo", exact: true }).waitFor();
+      await page.getByRole("tab", { name: "Roles", exact: true }).click();
+      assert.equal(await page.getByRole("button", { name: "View access", exact: true }).count(), 3);
+      await page.setViewportSize({ width: 375, height: 812 });
+      assert.ok(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        "Mobile Settings must not overflow the page",
+      );
+      await page.setViewportSize({ width: 1280, height: 720 });
     }
     console.log(`${role}: ${pages.length} demo pages and persisted profile passed`);
   }
   await page.goto(`${base}/pay-rent`);
   await page.getByRole("button", { name: /^Pay ₹/ }).click();
+  const methods = await page
+    .getByLabel("Demo payment method", { exact: true })
+    .locator("option")
+    .allTextContents();
+  assert.deepEqual(methods, ["UPI", "Stripe"], "Owner settings determine checkout options");
   await page
     .getByRole("dialog")
     .getByRole("button", { name: /^Pay ₹/ })

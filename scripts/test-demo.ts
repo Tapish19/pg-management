@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readDemoPaymentMethods, saveDemoPaymentMethods } from "../src/lib/demo-payment-settings";
 import { computeCompatibility, preferencesInput } from "../src/lib/roommate-compatibility";
 import {
   demoCall,
@@ -149,6 +150,18 @@ const order = demoCall("createPaymentOrder", {
   amount: booking.booking.monthlyRent,
   month: new Date().toISOString().slice(0, 7),
 }) as { paymentId: string };
+saveDemoPaymentMethods({ cash: false, upi: false, razorpay: false, stripe: false });
+assert.equal(readDemoPaymentMethods().cash, false);
+assert.throws(
+  () => demoCall("verifyPayment", { paymentId: order.paymentId, method: "cash" }),
+  /disabled/,
+);
+assert.ok(
+  (demoCall("getMyPayments") as { id: string; status: string }[]).some(
+    (p) => p.id === order.paymentId && p.status === "pending",
+  ),
+);
+saveDemoPaymentMethods({ cash: true, upi: false, razorpay: false, stripe: false });
 demoCall("verifyPayment", { paymentId: order.paymentId });
 assert.ok(
   (demoCall("getMyPayments") as { id: string; status: string }[]).some(
