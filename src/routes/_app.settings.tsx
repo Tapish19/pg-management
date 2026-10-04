@@ -13,22 +13,52 @@ import { getOwnerSettings, updateOwnerSettings } from "@/lib/api/functions/setti
 import { toast } from "sonner";
 import { SampleDataCard } from "@/components/sample-data-card";
 import type { NotificationPreferences } from "@/lib/owner-settings";
+import {
+  defaultNotificationPreferences,
+  defaultRentRules,
+  organizationSchema,
+  rentRulesSchema,
+  notificationPreferencesSchema,
+} from "@/lib/owner-settings";
+
+type Settings = Awaited<ReturnType<typeof getOwnerSettings>>;
+const demoSettingsKey = (id: string) => `pgone.demo.settings.v1.${id}`;
+function readDemoSettings(id: string): Settings {
+  const defaults: Settings = {
+    organizationName: "PG One Demo",
+    contactEmail: "admin@pgone.demo",
+    gstNumber: "",
+    ...defaultRentRules,
+    notifications: { ...defaultNotificationPreferences },
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(demoSettingsKey(id)) ?? "null");
+    if (!saved) return defaults;
+    return {
+      ...organizationSchema.parse(saved),
+      ...rentRulesSchema.parse(saved),
+      notifications: notificationPreferencesSchema.parse(saved.notifications),
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 export const Route = createFileRoute("/_app/settings")({ component: SettingsPage });
 
 function SettingsPage() {
   const { user, isDemo } = useAuth();
-  const enabled = user?.role === "admin" && !isDemo;
+  const enabled = user?.role === "admin";
   const query = useQuery({
-    queryKey: ["owner-settings", user?.id],
-    queryFn: () => getOwnerSettings(),
+    queryKey: ["owner-settings", isDemo ? "demo" : "real", user?.id],
+    queryFn: () => (isDemo ? readDemoSettings(user!.id) : getOwnerSettings()),
     enabled,
   });
   if (!enabled)
     return (
       <>
         <PageHeader title="Settings" description="Manage your organization." />
-        <Card className="p-6">Sign in with a real owner account to manage settings.</Card>
+        <Card className="p-6">Sign in as an owner to manage settings.</Card>
       </>
     );
   if (query.isLoading) return <PageHeader title="Settings" description="Loading settings…" />;
@@ -38,16 +68,38 @@ function SettingsPage() {
         Could not load settings. <Button onClick={() => query.refetch()}>Retry</Button>
       </Card>
     );
-  return <SettingsEditor key={user.id} initial={query.data} />;
+  return (
+    <SettingsEditor
+      key={`${isDemo ? "demo" : "real"}-${user.id}`}
+      initial={query.data}
+      demoOwnerId={isDemo ? user.id : undefined}
+    />
+  );
 }
 
-function SettingsEditor({ initial }: { initial: Awaited<ReturnType<typeof getOwnerSettings>> }) {
+function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwnerId?: string }) {
   const [settings, setSettings] = useState(initial);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
   async function save(section: "organization" | "rent" | "notifications") {
     setSaving(true);
     try {
+      if (demoOwnerId) {
+        const current = readDemoSettings(demoOwnerId);
+        const update =
+          section === "organization"
+            ? organizationSchema.parse(settings)
+            : section === "rent"
+              ? rentRulesSchema.parse(settings)
+              : { notifications: notificationPreferencesSchema.parse(settings.notifications) };
+        localStorage.setItem(
+          demoSettingsKey(demoOwnerId),
+          JSON.stringify({ ...current, ...update }),
+        );
+        await queryClient.invalidateQueries({ queryKey: ["owner-settings", "demo", demoOwnerId] });
+        toast.success("Demo settings saved on this browser");
+        return;
+      }
       if (section === "organization")
         await updateOwnerSettings({
           data: {
@@ -83,7 +135,13 @@ function SettingsEditor({ initial }: { initial: Awaited<ReturnType<typeof getOwn
   return (
     <>
       <PageHeader title="Settings" description="Organization, payments, notifications & roles." />
-      <SampleDataCard />
+      {demoOwnerId ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          Demo mode: organization, rent rules and notification preferences save on this browser.
+        </p>
+      ) : (
+        <SampleDataCard />
+      )}
       <Tabs defaultValue="org">
         <TabsList>
           <TabsTrigger value="org">Organization</TabsTrigger>
