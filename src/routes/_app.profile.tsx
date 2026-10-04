@@ -9,11 +9,25 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth";
 import { Upload, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/_app/profile")({ component: ProfilePage });
 
 function ProfilePage() {
-  const { user } = useAuth();
+  const { user, isDemo, updateProfile } = useAuth();
+  const [details, setDetails] = useState({ name: "", email: "", phone: "" });
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (user) setDetails({ name: user.name, email: user.email, phone: user.phone ?? "" }); }, [user]);
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await updateProfile(details);
+      toast.success("Profile updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save profile");
+    } finally { setSaving(false); }
+  }
   if (!user) return null;
   const initials = user.name
     .split(" ")
@@ -37,21 +51,22 @@ function ProfilePage() {
               </Badge>
             </div>
           </div>
-          <div className="mt-6 space-y-3">
+          <form onSubmit={handleSave} className="mt-6 space-y-3">
             <div>
               <Label className="mb-1.5 block">Full name</Label>
-              <Input defaultValue={user.name} />
+              <Input required minLength={2} maxLength={100} value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} />
             </div>
             <div>
               <Label className="mb-1.5 block">Email</Label>
-              <Input type="email" defaultValue={user.email} />
+              <Input required type="email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} />
             </div>
             <div>
               <Label className="mb-1.5 block">Phone</Label>
-              <Input defaultValue={user.phone} />
+              <Input type="tel" required={user.role === "tenant"} maxLength={30} value={details.phone} onChange={(e) => setDetails({ ...details, phone: e.target.value })} />
             </div>
-            <Button onClick={() => toast.success("Profile updated")}>Save changes</Button>
-          </div>
+            <Button type="submit" disabled={saving || isDemo}>{saving ? "Saving…" : "Save changes"}</Button>
+            {isDemo && <p className="text-sm text-muted-foreground">Sign in to a real account to save profile changes.</p>}
+          </form>
         </Card>
 
         <Card className="p-6">

@@ -54,9 +54,12 @@ function PayRentPage() {
   });
 
   const amount = booking?.booking?.monthlyRent ?? 0;
+  const rentMonth = new Date().toISOString().slice(0, 7);
+  const eligible = !!booking?.booking && ["active", "confirmed"].includes(booking.booking.status);
+  const alreadyPaid = (paymentHistory ?? []).some((p) => p.bookingId === booking?.booking?.id && p.type === "rent" && p.month === rentMonth && p.status === "paid");
 
   async function handlePay() {
-    if (!booking?.booking) return;
+    if (!booking?.booking || !eligible || alreadyPaid) return;
     setPaying(true);
     try {
       const order = await createPaymentOrder({
@@ -64,7 +67,7 @@ function PayRentPage() {
           bookingId: booking.booking.id,
           amount,
           type: "rent",
-          month: new Date().toISOString().slice(0, 7),
+          month: rentMonth,
         },
       });
 
@@ -154,7 +157,7 @@ function PayRentPage() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="lg">Pay {formatCurrency(amount)}</Button>
+                  <Button size="lg" disabled={!eligible || alreadyPaid || paymentsLoading || !paymentHistory}>{alreadyPaid ? "Paid this month" : eligible ? `Pay ${formatCurrency(amount)}` : "Awaiting booking confirmation"}</Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
@@ -166,7 +169,7 @@ function PayRentPage() {
                         You'll be redirected to Razorpay's secure checkout to pay via UPI, card, or
                         netbanking.
                       </p>
-                      <Button className="w-full" disabled={paying} onClick={handlePay}>
+                      <Button className="w-full" disabled={paying || !eligible || alreadyPaid || paymentsLoading} onClick={handlePay}>
                         {paying ? "Starting…" : `Pay ${formatCurrency(amount)}`}
                       </Button>
                     </div>

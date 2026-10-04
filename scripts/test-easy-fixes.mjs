@@ -7,6 +7,22 @@ import { parseNotificationReads, notificationStorageKey } from "../src/lib/notif
 import { toCsv } from "../src/lib/csv.ts";
 import { hasVacantBed, occupancyAfterStatusChange } from "../src/lib/room-availability.ts";
 import { QueryClient } from "@tanstack/react-query";
+import { assertRentPayable, assertPaymentOrder } from "../src/lib/payment-validation.ts";
+
+test("rent excludes unconfirmed and ended bookings", () => {
+  for (const status of ["pending", "cancelled", "checked_out"]) assert.throws(() => assertRentPayable({ status }, false), /confirmed or active/);
+  for (const status of ["confirmed", "active"]) assert.doesNotThrow(() => assertRentPayable({ status }, false));
+});
+
+test("rent cannot be paid twice for the same month", () => {
+  assert.throws(() => assertRentPayable({ status: "active" }, true), /already been paid/);
+});
+
+test("verification rejects another order or a missing saved order", () => {
+  assert.throws(() => assertPaymentOrder({ razorpayOrderId: "order_a" }, "order_b"), /does not match/);
+  assert.throws(() => assertPaymentOrder({ razorpayOrderId: null }, "order_b"), /does not match/);
+  assert.doesNotThrow(() => assertPaymentOrder({ razorpayOrderId: "order_a" }, "order_a"));
+});
 
 test("resident booking excludes cancelled and checked-out stays", () => {
   assert.equal(selectCurrentBooking([

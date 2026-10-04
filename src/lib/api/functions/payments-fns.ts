@@ -5,7 +5,16 @@ import { db } from "../db";
 import { bookings, payments, properties, tenants } from "../db/schema";
 import { genId } from "../id";
 import { getRazorpayClient, verifyRazorpaySignature } from "../razorpay";
-import { getSession } from "../auth";
+import { getSession, getTenantSession } from "../auth";
+import { assertRentPayable, assertPaymentOrder } from "../../payment-validation";
+
+async function requireBookingAccess(booking: typeof bookings.$inferSelect) {
+  const tenant = getTenantSession();
+  if (tenant?.tenantId === booking.tenantId) return;
+  const owner = getSession();
+  const property = owner && await db.select().from(properties).where(eq(properties.id, booking.propertyId)).get();
+  if (!owner || !property || property.ownerId !== owner.ownerId) throw new Error("Booking not found");
+}
 
 function requireSession() {
   const session = getSession();
@@ -27,6 +36,13 @@ export const createPaymentOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const booking = await db.select().from(bookings).where(eq(bookings.id, data.bookingId)).get();
     if (!booking) throw new Error("Booking not found");
+    await requireBookingAccess(booking);
+    if (data.type === "rent") {
+      if (!data.month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(data.month)) throw new Error("A valid rent month is required");
+      const history = await db.select().from(payments).where(eq(payments.bookingId, booking.id)).all();
+      assertRentPayable(booking, history.some((p) => p.type === "rent" && p.month === data.month && p.status === "paid"));
+      if (Math.round(data.amount * 100) !== Math.round(booking.monthlyRent * 100)) throw new Error("Rent amount does not match the booking");
+    }
 
     const razorpay = getRazorpayClient();
     const order = await razorpay.orders.create({
@@ -67,10 +83,19 @@ export const verifyPayment = createServerFn({ method: "POST" })
       .parse(input)
   )
   .handler(async ({ data }) => {
+    const payment = await db.select().from(payments).where(eq(payments.id, data.paymentId)).get();
+    if (!payment) throw new Error("Payment not found");
+    const booking = await db.select().from(bookings).where(eq(bookings.id, payment.bookingId)).get();
+    if (!booking) throw new Error("Booking not found");
+    await requireBookingAccess(booking);
+    assertPaymentOrder(payment, data.razorpay_order_id);
     const valid = verifyRazorpaySignature(data.razorpay_order_id, data.razorpay_payment_id, data.razorpay_signature);
     if (!valid) {
-      await db.update(payments).set({ status: "failed" }).where(eq(payments.id, data.paymentId));
       throw new Error("Payment verification failed");
+    }
+    if (payment.status === "paid") {
+      if (payment.razorpayPaymentId !== data.razorpay_payment_id) throw new Error("Payment already verified with another transaction");
+      return { ok: true };
     }
     await db
       .update(payments)

@@ -30,7 +30,7 @@ function MyFoodPage() {
       setSubmitting(false);
     }
   }
-  const { data: menu, isLoading } = useQuery({ queryKey: ["my-food-menu"], queryFn: () => getMyFoodMenu() });
+  const { data: menu, isLoading, isError, refetch } = useQuery({ queryKey: ["my-food-menu"], queryFn: () => getMyFoodMenu(), refetchInterval: 30_000 });
   const sorted = [...(menu || [])].sort((a, b) => DAY_ORDER.indexOf(a.day) - DAY_ORDER.indexOf(b.day));
 
   return (
@@ -61,7 +61,7 @@ function MyFoodPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
+              {isError ? <tr><td colSpan={4} className="p-6 text-center">Could not load menu. <Button onClick={() => refetch()}>Retry</Button></td></tr> : isLoading ? (
                 <tr>
                   <td colSpan={4} className="p-6 text-center text-muted-foreground">
                     Loading…

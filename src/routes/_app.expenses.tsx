@@ -50,7 +50,9 @@ function ExpensesPage() {
     queryFn: () => listOwnerProperties(),
   });
 
-  const total = (expenseList || []).reduce((s, e) => s + e.amount, 0);
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const total = (expenseList || []).filter((e) => e.date.slice(0, 7) === month).reduce((s, e) => s + e.amount, 0);
   const pending = (expenseList || []).filter((e) => e.status === "pending").reduce((s, e) => s + e.amount, 0);
 
   async function handleStatusChange(id: string, status: ExpenseStatus) {

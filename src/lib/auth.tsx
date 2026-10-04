@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DEMO_USERS, type DemoUser, type Role } from "./demo-data";
 import { getCurrentSession, login as loginFn, signup as signupFn, logout as logoutFn } from "./api/functions/auth-fns";
 import { getCurrentTenantSession, loginTenant as loginTenantFn, logoutTenant as logoutTenantFn } from "./api/functions/tenant-fns";
+import { saveProfile } from "./api/functions/profile-fns";
 
 const KEY = "pgone.session.v1";
 
@@ -10,6 +11,7 @@ type AuthCtx = {
   user: DemoUser | null;
   loading: boolean;
   isDemo: boolean;
+  updateProfile: (details: { name: string; email: string; phone: string }) => Promise<void>;
   // Real owner/admin auth, backed by the database
   loginReal: (email: string, password: string) => Promise<void>;
   signupReal: (name: string, email: string, password: string, phone?: string) => Promise<void>;
@@ -25,6 +27,7 @@ const Ctx = createContext<AuthCtx>({
   user: null,
   loading: true,
   isDemo: false,
+  updateProfile: async () => {},
   loginReal: async () => {},
   signupReal: async () => {},
   loginTenantReal: async () => {},
@@ -132,9 +135,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(DEMO_USERS[role]);
   };
 
+  const updateProfile = async (details: { name: string; email: string; phone: string }) => {
+    if (isDemo) throw new Error("Profile saving requires a real account");
+    const saved = await saveProfile({ data: details });
+    setUser((current) => current ? { ...current, ...saved } : current);
+    await queryClient.invalidateQueries();
+  };
+
   return (
     <Ctx.Provider
-      value={{ user, loading, isDemo, loginReal, signupReal, loginTenantReal, loginAs, logout, setRole }}
+      value={{ user, loading, isDemo, updateProfile, loginReal, signupReal, loginTenantReal, loginAs, logout, setRole }}
     >
       {children}
     </Ctx.Provider>

@@ -68,6 +68,13 @@ export const updateRoom = createServerFn({ method: "POST" })
     if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
     const update: Record<string, unknown> = { ...rest };
+    if (rest.totalBeds !== undefined && rest.totalBeds < room.occupiedBeds) throw new Error("Capacity cannot be lower than occupied beds");
+    if (rest.propertyId && rest.propertyId !== room.propertyId) {
+      const destination = await db.select().from(properties).where(eq(properties.id, rest.propertyId)).get();
+      if (!destination || destination.ownerId !== session.ownerId) throw new Error("Destination property not found");
+      throw new Error("Moving rooms between properties is not supported; create a room in the destination property instead");
+    }
+    if (rest.totalBeds !== undefined && room.status !== "maintenance") update.status = room.occupiedBeds >= rest.totalBeds ? "full" : "available";
     if (amenities) update.amenities = JSON.stringify(amenities);
     if (images) update.images = JSON.stringify(images);
 

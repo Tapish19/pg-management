@@ -16,7 +16,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app/food")({ component: FoodPage });
 
 function FoodPage() {
-  const { data: properties } = useQuery({
+  const { data: properties, isError, refetch } = useQuery({
     queryKey: ["properties", "mine"],
     queryFn: () => listOwnerProperties(),
   });
@@ -24,7 +24,7 @@ function FoodPage() {
   return (
     <>
       <PageHeader title="Food & Menu" description="Weekly meal plan per property." />
-      {!properties ? (
+      {isError ? <Card className="p-6">Could not load properties. <Button onClick={() => refetch()}>Retry</Button></Card> : !properties ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : properties.length === 0 ? (
         <Card className="p-10 text-center text-muted-foreground">Add a property first to set up its menu.</Card>
@@ -56,7 +56,7 @@ function PropertyMenu({ propertyId }: { propertyId: string }) {
   const [draft, setDraft] = useState({ breakfast: "", lunch: "", dinner: "" });
   const [saving, setSaving] = useState(false);
 
-  const { data: menu, isLoading } = useQuery({
+  const { data: menu, isLoading, isError, refetch } = useQuery({
     queryKey: ["food-menu", propertyId],
     queryFn: () => getFoodMenu({ data: { propertyId } }),
   });
@@ -71,6 +71,7 @@ function PropertyMenu({ propertyId }: { propertyId: string }) {
     try {
       await updateFoodMenuDay({ data: { id, ...draft } });
       queryClient.invalidateQueries({ queryKey: ["food-menu", propertyId] });
+      queryClient.invalidateQueries({ queryKey: ["my-food-menu"] });
       setEditing(null);
       toast.success("Menu updated");
     } catch (err) {
@@ -81,6 +82,7 @@ function PropertyMenu({ propertyId }: { propertyId: string }) {
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading menu…</p>;
+  if (isError) return <Card className="p-6">Could not load menu. <Button onClick={() => refetch()}>Retry</Button></Card>;
 
   return (
     <>

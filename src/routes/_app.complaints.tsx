@@ -155,7 +155,7 @@ function ComplaintsPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {(staffList || []).map((s) => (
+                                  {(staffList || []).filter((s) => s.propertyId === c.propertyId).map((s) => (
                                     <SelectItem key={s.id} value={s.id}>
                                       {s.name}
                                     </SelectItem>

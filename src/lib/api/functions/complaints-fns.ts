@@ -73,6 +73,10 @@ export const updateComplaint = createServerFn({ method: "POST" })
     const property = await db.select().from(properties).where(eq(properties.id, complaint.propertyId)).get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Not found");
 
+    if (rest.assignedTo) {
+      const assignee = await db.select().from(staff).where(eq(staff.id, rest.assignedTo)).get();
+      if (!assignee || assignee.propertyId !== complaint.propertyId) throw new Error("Choose staff from this complaint's property");
+    }
     await db.update(complaints).set(rest).where(eq(complaints.id, id));
     return { ok: true };
   });
