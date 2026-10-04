@@ -329,6 +329,33 @@ try {
   assert.equal(kyc.status, "pending");
   assert.equal(kyc.proofType, "aadhaar");
   assert.ok(!JSON.stringify(kyc).includes("private-proof-number"));
+  const identityDocument = {
+    proofType: "passport",
+    name: "identity.pdf",
+    mime: "application/pdf",
+    base64: Buffer.from("%PDF-1.4\nTest identity\n%%EOF").toString("base64"),
+  };
+  await rpc("uploadMyKycDocument", "POST", identityDocument, residentCookie);
+  assert.equal(
+    (await rpc("getKycDocument", "GET", { tenantId: "resident" }, residentCookie)).name,
+    "identity.pdf",
+  );
+  assert.equal(
+    (await rpc("getKycDocument", "GET", { tenantId: "resident" })).base64,
+    identityDocument.base64,
+  );
+  await assert.rejects(
+    rpc("getKycDocument", "GET", { tenantId: "resident" }, ownerCookie("owner-b")),
+  );
+  await assert.rejects(rpc("getKycDocument", "GET", { tenantId: "resident" }, ""));
+  await assert.rejects(
+    rpc(
+      "uploadMyKycDocument",
+      "POST",
+      { ...identityDocument, base64: Buffer.from("not a PDF").toString("base64") },
+      residentCookie,
+    ),
+  );
   const myBooking = await rpc("getMyBooking", "GET", undefined, residentCookie);
   assert.equal(myBooking.policy.noticePeriodDays, 45);
   assert.equal(myBooking.policy.lateFeePerDay, 25);
@@ -461,6 +488,47 @@ try {
   assert.equal(missingPage.status, 404);
   assert.ok((await missingPage.text()).includes("</html>"));
   assert.ok(!serverLog.includes("SSR stream transform exceeded"));
+  const workspace = await rpc("createDemoWorkspace", "POST", { entries: {} }, "");
+  const shared = (role, name, input) =>
+    rpc("sharedDemoAction", "POST", { id: workspace.id, role, name, input }, "");
+  await shared("admin", "listOwnerProperties");
+  await Promise.all([
+    shared("admin", "createNotice", {
+      propertyId: "p1",
+      title: "Shared notice one",
+      body: "First edit",
+      audience: "All tenants",
+    }),
+    shared("admin", "createNotice", {
+      propertyId: "p1",
+      title: "Shared notice two",
+      body: "Second edit",
+      audience: "All tenants",
+    }),
+  ]);
+  const sharedNotices = JSON.parse((await shared("tenant", "getMyNotices")).result);
+  assert.ok(sharedNotices.some((notice) => notice.title === "Shared notice one"));
+  assert.ok(sharedNotices.some((notice) => notice.title === "Shared notice two"));
+  await shared("admin", "saveDemoConfig", {
+    key: "pgone.demo.roles.v1",
+    value: { staff: ["/dashboard", "/profile"], tenant: ["/dashboard", "/profile"] },
+  });
+  await assert.rejects(shared("tenant", "askAssistantFn", { question: "rent" }), /disabled access/);
+  await assert.rejects(
+    shared("staff", "saveDemoConfig", { key: "pgone.demo.roles.v1", value: {} }),
+    /owner/,
+  );
+  await assert.rejects(shared("tenant", "createProperty", {}), /not available/);
+  assert.ok(
+    String(
+      (
+        await client.execute({
+          sql: "SELECT payload FROM demo_workspaces WHERE id=?",
+          args: [workspace.id],
+        })
+      ).rows[0].payload,
+    ).includes("Shared notice two"),
+  );
   console.log(
     "Production smoke passed: migrations, owner isolation, saved settings, edits, KYC, notifications, attendance, atomic onboarding and public listing/detail pages.",
   );

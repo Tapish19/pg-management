@@ -155,7 +155,7 @@ try {
         .first()
         .fill("Demo organization edited");
       await page.getByRole("button", { name: "Save changes", exact: true }).click();
-      await page.getByText("Demo settings saved on this browser", { exact: true }).waitFor();
+      await page.getByText("Demo settings saved", { exact: true }).waitFor();
       await page.reload();
       await page.waitForFunction(
         () =>
@@ -188,7 +188,8 @@ try {
       );
       await page.getByRole("button", { name: "Disconnect stripe demo", exact: true }).waitFor();
       await page.getByRole("tab", { name: "Roles", exact: true }).click();
-      assert.equal(await page.getByRole("button", { name: "View access", exact: true }).count(), 3);
+      assert.equal(await page.getByRole("button", { name: "View access", exact: true }).count(), 1);
+      assert.equal(await page.getByRole("button", { name: "Edit access", exact: true }).count(), 2);
       await page.setViewportSize({ width: 375, height: 812 });
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -213,9 +214,66 @@ try {
   await page.goto(`${base}/settings`);
   await page.waitForURL("**/dashboard");
   assert.equal(requests.length, 0, "Demo pages must never call authenticated server functions");
+  // Two isolated browsers share persistent records through a capability link.
+  await page.goto(`${base}/auth`);
+  await page.getByRole("button", { name: /^Owner \/ Admin Full analytics/ }).click();
+  await page.waitForURL("**/dashboard");
+  await page.goto(`${base}/settings`);
+  await page.getByRole("button", { name: "Create share link", exact: true }).click();
+  const linkInput = page.getByLabel("Demo share link", { exact: true });
+  await linkInput.waitFor();
+  const link = await linkInput.inputValue();
+  const secondContext = await browser.newContext();
+  const resident = await secondContext.newPage();
+  resident.on("pageerror", (error) => errors.push(error.message));
+  await resident.goto(link);
+  await resident.getByRole("button", { name: /^Tenant Room/ }).click();
+  await resident.waitForURL("**/dashboard");
+  await resident.goto(`${base}/profile`);
+  await resident.locator("form").first().getByRole("textbox").first().fill("Shared Resident");
+  await resident.getByRole("button", { name: "Save changes", exact: true }).click();
+  await resident.getByText("Profile updated", { exact: true }).waitFor();
+  await resident
+    .getByLabel("ID document (PDF, PNG or JPEG, up to 2 MB)")
+    .setInputFiles({
+      name: "sample-id.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4\nSample demo identity document\n%%EOF"),
+    });
+  await resident.getByRole("button", { name: "Upload document", exact: true }).click();
+  await resident
+    .getByText("Document uploaded. Your owner can review it now.", { exact: true })
+    .waitFor();
+  await page.goto(`${base}/tenants`);
+  const row = page.getByRole("row").filter({ hasText: "Shared Resident" });
+  await row.waitFor();
+  await row.getByRole("button", { name: "Review document", exact: true }).click();
+  await page.getByRole("dialog").getByText("sample-id.pdf · aadhaar", { exact: true }).waitFor();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download document", exact: true }).click();
+  const documentDownload = await downloadPromise;
+  assert.equal(documentDownload.suggestedFilename(), "sample-id.pdf");
+  await page.keyboard.press("Escape");
+  await page.goto(`${base}/settings`);
+  await page.getByRole("tab", { name: "Roles", exact: true }).click();
+  await page.getByRole("button", { name: "Edit access", exact: true }).nth(1).click();
+  await page.getByRole("switch", { name: "tenant my-assistant", exact: true }).click();
+  await page.getByRole("button", { name: "Save access", exact: true }).click();
+  await page.getByText("Role access saved", { exact: true }).waitFor();
+  await resident.reload();
+  await resident.goto(`${base}/my-assistant`);
+  await resident.waitForURL("**/dashboard");
+  assert.equal(await resident.getByRole("link", { name: "Ask Assistant", exact: true }).count(), 0);
+  await resident.goto(`${base}/profile`);
+  assert.equal(
+    await resident.locator("form").first().getByRole("textbox").first().inputValue(),
+    "Shared Resident",
+  );
+  await resident.getByRole("button", { name: "Download document", exact: true }).waitFor();
+  await secondContext.close();
   assert.deepEqual(errors, [], "No browser runtime errors");
   console.log(
-    "Browser demo passed: owner login, all role pages, local rent payment, forbidden route redirect and zero real-account requests.",
+    "Browser demo passed: all role pages, cross-browser shared records, KYC upload/review/download, role permissions and simulated rent.",
   );
 } catch (error) {
   console.error(logs.slice(-3000));

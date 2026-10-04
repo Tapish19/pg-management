@@ -13,6 +13,15 @@ import {
 } from "./roommate-compatibility";
 import { buildOwnerNotifications } from "./owner-notifications";
 import { defaultNotificationPreferences, parseNotificationPreferences } from "./owner-settings";
+import { validateKycDocument, type KycDocument } from "./kyc-document";
+import { rolePages, actionPage, validateRolePages, ROLE_KEY } from "./demo-role-access";
+import { demoPaymentMethodsSchema } from "./demo-payment-settings";
+import {
+  organizationSchema,
+  rentRulesSchema,
+  notificationPreferencesSchema,
+} from "./owner-settings";
+export type DemoStorage = Pick<Storage, "getItem" | "setItem">;
 
 export const DEMO_SESSION_KEY = "pgone.session.v1";
 const DATA_KEY = "pgone.demo.data.v1";
@@ -33,6 +42,7 @@ type State = {
   profiles: Record<string, D.DemoUser>;
   preferences: Record<string, Record<string, unknown>>;
   comments: Record<string, string[]>;
+  documents?: Record<string, KycDocument>;
 };
 const timestamp = () => new Date().toISOString();
 const id = () => `demo-${crypto.randomUUID()}`;
@@ -222,8 +232,8 @@ function freshState(): State {
     comments: {},
   };
 }
-function read(): State {
-  const raw = localStorage.getItem(DATA_KEY);
+function read(storage: DemoStorage = localStorage): State {
+  const raw = storage.getItem(DATA_KEY);
   if (raw) {
     const state = JSON.parse(raw) as State;
     seedPreferences(state);
@@ -231,7 +241,7 @@ function read(): State {
   }
   const state = freshState();
   seedPreferences(state);
-  localStorage.setItem(DATA_KEY, JSON.stringify(state));
+  storage.setItem(DATA_KEY, JSON.stringify(state));
   return state;
 }
 // Deterministic, varied sample surveys. Preserve all preferences edited by users.
@@ -252,10 +262,22 @@ function seedPreferences(state: State) {
 export function demoProfile(role: D.Role): D.DemoUser {
   return read().profiles[role];
 }
-export function demoCall(name: string, input: unknown = {}): unknown {
-  const role = demoRole();
+export function demoCall(
+  name: string,
+  input: unknown = {},
+  context?: { role: D.Role; storage: DemoStorage },
+): unknown {
+  const role = context?.role ?? demoRole();
+  const storage = context?.storage ?? localStorage;
   if (!role) throw new Error("Choose a demo role first");
-  const s = read(),
+  const page = actionPage(name);
+  const staffTaskAccess =
+    role === "staff" &&
+    ["listOwnerComplaints", "updateComplaint"].includes(name) &&
+    rolePages(role, storage).includes("/tasks");
+  if (role !== "admin" && page && !rolePages(role, storage).includes(page) && !staffTaskAccess)
+    throw new Error("Your owner has disabled access to this feature");
+  const s = read(storage),
     data = (input ?? {}) as Record<string, unknown>;
   const text = (key: string) => String(data[key] ?? "");
   const number = (key: string) => Number(data[key] ?? 0);
@@ -271,6 +293,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
     "saveMyPreferences",
     "getMyRoommateMatches",
     "getMyKyc",
+    "uploadMyKycDocument",
     "createMyComplaint",
     "createMyVisitor",
     "askAssistantFn",
@@ -282,7 +305,9 @@ export function demoCall(name: string, input: unknown = {}): unknown {
   if (
     (tenantOnly.includes(name) && role !== "tenant") ||
     (ownerOnly.test(name) && role !== "admin") ||
-    (role === "tenant" && !tenantOnly.includes(name) && name !== "saveProfile")
+    (role === "tenant" &&
+      !tenantOnly.includes(name) &&
+      !["saveProfile", "getKycDocument", "getDemoConfig"].includes(name))
   )
     throw new Error("This action is not available for your demo role");
   const visible = (propertyId: string) => role === "admin" || propertyId === user.propertyId;
@@ -306,7 +331,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
     room: s.rooms.find((r) => r.id === b.roomId),
   });
   const save = (result: unknown = { ok: true }) => {
-    localStorage.setItem(DATA_KEY, JSON.stringify(s));
+    storage.setItem(DATA_KEY, JSON.stringify(s));
     return result;
   };
   const preferenceFor = (tenantId: string) => {
@@ -315,6 +340,54 @@ export function demoCall(name: string, input: unknown = {}): unknown {
   };
   const preferences = preferenceFor(user.id);
   switch (name) {
+    case "getDemoConfig":
+      return Object.fromEntries(
+        [
+          "pgone.demo.settings.v1.u-admin",
+          "pgone.demo.payment-methods.v1",
+          "pgone.demo.roles.v1",
+        ].map((key) => [key, storage.getItem(key)]),
+      );
+    case "saveDemoConfig": {
+      if (role !== "admin") throw new Error("Only the owner can edit settings");
+      const key = text("key");
+      if (
+        ![
+          "pgone.demo.settings.v1.u-admin",
+          "pgone.demo.payment-methods.v1",
+          "pgone.demo.roles.v1",
+        ].includes(key)
+      )
+        throw new Error("Unknown setting");
+      if (key === ROLE_KEY) data.value = validateRolePages(data.value);
+      if (key === "pgone.demo.payment-methods.v1")
+        data.value = demoPaymentMethodsSchema.parse(data.value);
+      if (key === "pgone.demo.settings.v1.u-admin") {
+        const value = data.value as Record<string, unknown>;
+        data.value = {
+          ...organizationSchema.parse(value),
+          ...rentRulesSchema.parse(value),
+          notifications: notificationPreferencesSchema.parse(value.notifications),
+        };
+      }
+      storage.setItem(key, JSON.stringify(data.value));
+      return { ok: true };
+    }
+    case "uploadMyKycDocument": {
+      const document = validateKycDocument(data);
+      s.documents ??= {};
+      s.documents[user.id] = { ...document, uploadedAt: timestamp() };
+      const tenant = s.tenants.find((t) => t.id === user.id)!;
+      tenant.idProofType = document.proofType;
+      tenant.kycStatus = "pending";
+      return save();
+    }
+    case "getKycDocument": {
+      const tenantId = text("tenantId");
+      if (role !== "admin" && (role !== "tenant" || tenantId !== user.id))
+        throw new Error("Access denied");
+      return s.documents?.[tenantId] ?? null;
+    }
     case "getTaskComments":
       return s.comments[text("id")] ?? [];
     case "addTaskComment": {
@@ -329,7 +402,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
       try {
         settings = {
           ...settings,
-          ...JSON.parse(localStorage.getItem("pgone.demo.settings.v1.u-admin") ?? "{}"),
+          ...JSON.parse(storage.getItem("pgone.demo.settings.v1.u-admin") ?? "{}"),
         };
       } catch {}
       return buildOwnerNotifications(
@@ -445,7 +518,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
       try {
         policy = {
           ...policy,
-          ...JSON.parse(localStorage.getItem("pgone.demo.settings.v1.u-admin") ?? "{}"),
+          ...JSON.parse(storage.getItem("pgone.demo.settings.v1.u-admin") ?? "{}"),
         };
       } catch {}
       return {
@@ -475,8 +548,9 @@ export function demoCall(name: string, input: unknown = {}): unknown {
     case "getMyKyc":
       return {
         status: s.tenants.find((t) => t.id === user.id)?.kycStatus ?? "pending",
-        proofType: "Sample ID",
-        hasProofDetails: true,
+        proofType: s.tenants.find((t) => t.id === user.id)?.idProofType,
+        hasProofDetails:
+          !!s.tenants.find((t) => t.id === user.id)?.idProofNumber || !!s.documents?.[user.id],
       };
     case "getMyPreferences":
       return { ...preferences, id: `prefs-${user.id}`, tenantId: user.id, updatedAt: timestamp() };
@@ -882,7 +956,7 @@ export function demoCall(name: string, input: unknown = {}): unknown {
       };
     }
     case "verifyPayment": {
-      const methods = readDemoPaymentMethods();
+      const methods = readDemoPaymentMethods(storage);
       const method =
         text("method") || (Object.keys(methods) as DemoPaymentMethod[]).find((key) => methods[key]);
       if (!method || !(method in methods) || !methods[method as DemoPaymentMethod])
@@ -925,7 +999,11 @@ export function withDemo<T extends (...args: never[]) => unknown>(name: string, 
   return ((...args: unknown[]) => {
     if (!demoRole()) return (real as unknown as (...args: unknown[]) => unknown)(...args);
     try {
-      return Promise.resolve(demoCall(name, (args[0] as { data?: unknown } | undefined)?.data));
+      if (!localStorage.getItem("pgone.shared-demo.v1"))
+        return Promise.resolve(demoCall(name, (args[0] as { data?: unknown } | undefined)?.data));
+      return import("./demo-sharing").then(({ runDemoAction }) =>
+        runDemoAction(name, (args[0] as { data?: unknown } | undefined)?.data),
+      );
     } catch (error) {
       return Promise.reject(error);
     }

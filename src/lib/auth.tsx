@@ -14,6 +14,8 @@ import {
 } from "./api/functions/tenant-fns";
 import { saveProfile } from "./demo-api";
 import { demoRole, demoProfile } from "./demo-store";
+import { joinSharedDemo, syncSharedDemo } from "./demo-sharing";
+import { toast } from "sonner";
 
 const KEY = "pgone.session.v1";
 
@@ -54,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
+      try {
+        await joinSharedDemo();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not load shared demo");
+      }
       const savedDemoRole = demoRole();
       if (savedDemoRole) {
         setUser(demoProfile(savedDemoRole));
@@ -111,6 +118,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!isDemo) return;
+    const timer = window.setInterval(() => {
+      syncSharedDemo()
+        .then(() => {
+          const role = demoRole();
+          if (role) setUser(demoProfile(role));
+          void queryClient.invalidateQueries();
+        })
+        .catch(() => {});
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [isDemo, queryClient]);
+
+  useEffect(() => {
+    const refresh = () => {
+      const role = demoRole();
+      if (role) setUser(demoProfile(role));
+    };
+    window.addEventListener("demo-synced", refresh);
+    return () => window.removeEventListener("demo-synced", refresh);
+  }, []);
+
   const loginReal = async (email: string, password: string) => {
     const owner = await loginFn({ data: { email, password } });
     queryClient.clear();
@@ -157,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     setIsDemo(true);
     localStorage.setItem(KEY, JSON.stringify({ role }));
+    await joinSharedDemo();
     setUser(demoProfile(role));
     setLoading(false);
   };

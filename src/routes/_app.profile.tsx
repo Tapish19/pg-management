@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getMyKyc } from "@/lib/demo-api";
 import { RoommatePreferences } from "@/components/roommate-preferences";
+import { KycDocuments } from "@/components/kyc-documents";
 
 export const Route = createFileRoute("/_app/profile")({ component: ProfilePage });
 
@@ -29,7 +30,7 @@ function ProfilePage() {
   });
   useEffect(() => {
     if (user) setDetails({ name: user.name, email: user.email, phone: user.phone ?? "" });
-  }, [user]);
+  }, [user?.id, user?.name, user?.email, user?.phone]);
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -100,7 +101,7 @@ function ProfilePage() {
             </Button>
             {isDemo && (
               <p className="text-sm text-muted-foreground">
-                Demo profile changes save on this browser.
+                Demo profile changes save in your demo workspace.
               </p>
             )}
           </form>
@@ -142,6 +143,12 @@ function ProfilePage() {
           )}
         </Card>
       </div>
+      {resident && (
+        <Card className="p-6 mt-6">
+          <h2 className="font-semibold">ID documents</h2>
+          <KycDocuments tenantId={user.id} canUpload />
+        </Card>
+      )}
       {resident && <RoommatePreferences />}
     </>
   );

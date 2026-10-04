@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
-import { demoPages } from "@/lib/demo-store";
+import { rolePages } from "@/lib/demo-role-access";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { useAuth } from "@/lib/auth";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_app")({
 function AppLayout() {
   const { user, loading, isDemo } = useAuth();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const allowed = !isDemo || !user || demoPages[user.role].includes(pathname.replace(/\/$/, ""));
+  const allowed = !isDemo || !user || rolePages(user.role).includes(pathname.replace(/\/$/, ""));
   const navigate = useNavigate();
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });

@@ -21,6 +21,8 @@ export const getFoodMenu = withDemo("getFoodMenu", api4.getFoodMenu);
 export const updateFoodMenuDay = withDemo("updateFoodMenuDay", api4.updateFoodMenuDay);
 import * as api5 from "./api/functions/kyc-fns";
 export const getMyKyc = withDemo("getMyKyc", api5.getMyKyc);
+export const uploadMyKycDocument = withDemo("uploadMyKycDocument", api5.uploadMyKycDocument);
+export const getKycDocument = withDemo("getKycDocument", api5.getKycDocument);
 import * as api6 from "./api/functions/matching-fns";
 export const getMyPreferences = withDemo("getMyPreferences", api6.getMyPreferences);
 export const saveMyPreferences = withDemo("saveMyPreferences", api6.saveMyPreferences);

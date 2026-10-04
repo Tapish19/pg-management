@@ -194,6 +194,52 @@ assert.ok(
   ),
 );
 let realCalls = 0;
+demoCall("uploadMyKycDocument", {
+  proofType: "passport",
+  name: "demo-id.pdf",
+  mime: "application/pdf",
+  base64: btoa("%PDF-1.4\nTest\n%%EOF"),
+});
+assert.equal((demoCall("getMyKyc") as { status: string }).status, "pending");
+assert.equal(
+  (demoCall("getKycDocument", { tenantId: "u-tenant" }) as { name: string }).name,
+  "demo-id.pdf",
+);
+assert.throws(() => demoCall("getKycDocument", { tenantId: "another-tenant" }), /Access denied/);
+assert.throws(
+  () =>
+    demoCall("uploadMyKycDocument", {
+      proofType: "passport",
+      name: "bad.pdf",
+      mime: "application/pdf",
+      base64: btoa("invalid"),
+    }),
+  /content/,
+);
+role("admin");
+demoCall("saveDemoConfig", {
+  key: "pgone.demo.roles.v1",
+  value: {
+    staff: demoPages.staff,
+    tenant: demoPages.tenant.filter((path) => path !== "/my-assistant"),
+  },
+});
+role("tenant");
+assert.throws(() => demoCall("askAssistantFn", { question: "rent" }), /disabled access/);
+assert.throws(
+  () => demoCall("saveDemoConfig", { key: "pgone.demo.roles.v1", value: {} }),
+  /not available/,
+);
+role("admin");
+assert.throws(
+  () =>
+    demoCall("saveDemoConfig", {
+      key: "pgone.demo.roles.v1",
+      value: { staff: ["/payments"], tenant: demoPages.tenant },
+    }),
+  /supported pages/,
+);
+role("tenant");
 const call = withDemo("getMyBooking", async () => {
   realCalls++;
   return null;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listOwnerComplaints, updateComplaint } from "@/lib/demo-api";
 import { demoCall } from "@/lib/demo-store";
+import { runDemoAction } from "@/lib/demo-sharing";
 import { useAuth } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -33,10 +34,11 @@ function TasksPage() {
       toast.error(error instanceof Error ? error.message : "Could not update task");
     }
   }
-  function addComment(id: string) {
+  async function addComment(id: string) {
     if (!comment.trim()) return;
     try {
-      demoCall("addTaskComment", { id, comment: comment.trim() });
+      await runDemoAction("addTaskComment", { id, comment: comment.trim() });
+      await queryClient.invalidateQueries();
       setComment("");
       setEditing(null);
       toast.success("Comment saved");

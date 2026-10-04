@@ -20,7 +20,7 @@ import { getMyBooking, getMyPayments } from "@/lib/demo-api";
 import { createPaymentOrder, verifyPayment } from "@/lib/demo-api";
 import { rentDueDate } from "@/lib/owner-settings";
 import { useAuth } from "@/lib/auth";
-import { demoCall } from "@/lib/demo-store";
+import { runDemoAction } from "@/lib/demo-sharing";
 import { readDemoPaymentMethods, type DemoPaymentMethod } from "@/lib/demo-payment-settings";
 
 export const Route = createFileRoute("/_app/pay-rent")({ component: PayRentPage });
@@ -88,7 +88,7 @@ function PayRentPage() {
       });
 
       if (isDemo) {
-        demoCall("verifyPayment", {
+        await runDemoAction("verifyPayment", {
           paymentId: order.paymentId,
           method: demoMethod,
         });

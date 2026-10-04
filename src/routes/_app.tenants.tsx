@@ -13,7 +13,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type KycStatus = "verified" | "pending" | "missing";
 import { StatusPill, statusTone } from "@/components/ui-ext/stat";
@@ -32,6 +38,7 @@ import { listOwnerProperties } from "@/lib/demo-api";
 import { listOwnerRooms } from "@/lib/demo-api";
 import { listTenantRiskScores } from "@/lib/demo-api";
 import { toast } from "sonner";
+import { KycDocuments } from "@/components/kyc-documents";
 
 const RISK_BAND_TONE: Record<string, "success" | "warning" | "destructive"> = {
   low: "success",
@@ -40,7 +47,9 @@ const RISK_BAND_TONE: Record<string, "success" | "warning" | "destructive"> = {
 };
 
 export const Route = createFileRoute("/_app/tenants")({
-  validateSearch: (search: Record<string, unknown>): { q?: string } => ({ q: typeof search.q === "string" ? search.q : undefined }),
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
   component: TenantsPage,
 });
 
@@ -80,7 +89,9 @@ function TenantsPage() {
   const filtered = (tenantRows || []).filter((row) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return row.tenant?.name.toLowerCase().includes(q) || row.tenant?.email.toLowerCase().includes(q);
+    return (
+      row.tenant?.name.toLowerCase().includes(q) || row.tenant?.email.toLowerCase().includes(q)
+    );
   });
 
   async function handleKyc(id: string, kycStatus: "verified" | "pending" | "missing") {
@@ -191,7 +202,10 @@ function TenantsPage() {
                       <TableCell>{row.booking.checkInDate}</TableCell>
                       <TableCell>{formatCurrency(row.booking.monthlyRent)}</TableCell>
                       <TableCell>
-                        <Select value={t.kycStatus} onValueChange={(v) => handleKyc(t.id, v as KycStatus)}>
+                        <Select
+                          value={t.kycStatus}
+                          onValueChange={(v) => handleKyc(t.id, v as KycStatus)}
+                        >
                           <SelectTrigger className="h-7 w-[110px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
@@ -201,14 +215,30 @@ function TenantsPage() {
                             <SelectItem value="missing">Missing</SelectItem>
                           </SelectContent>
                         </Select>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="mt-2">
+                              Review document
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>{t.name}'s ID document</DialogTitle>
+                            </DialogHeader>
+                            <KycDocuments tenantId={t.id} />
+                          </DialogContent>
+                        </Dialog>
                       </TableCell>
                       <TableCell>
-                        <StatusPill tone={statusTone(row.booking.status)}>{row.booking.status}</StatusPill>
+                        <StatusPill tone={statusTone(row.booking.status)}>
+                          {row.booking.status}
+                        </StatusPill>
                       </TableCell>
                       <TableCell>
                         {(() => {
                           const risk = riskByTenantId.get(t.id);
-                          if (!risk) return <span className="text-xs text-muted-foreground">—</span>;
+                          if (!risk)
+                            return <span className="text-xs text-muted-foreground">—</span>;
                           return (
                             <StatusPill tone={RISK_BAND_TONE[risk.riskBand]}>
                               {risk.riskBand} · {Math.round(risk.riskProbability * 100)}%
@@ -232,11 +262,20 @@ function OnboardTenantForm({
   rooms,
   onCreated,
 }: {
-  rooms: { id: string; roomNumber: string; propertyId: string; occupiedBeds: number; totalBeds: number; status: string }[];
+  rooms: {
+    id: string;
+    roomNumber: string;
+    propertyId: string;
+    occupiedBeds: number;
+    totalBeds: number;
+    status: string;
+  }[];
   properties: { id: string; name: string }[];
   onCreated: () => void;
 }) {
-  const availableRooms = rooms.filter((r) => r.status !== "maintenance" && r.occupiedBeds < r.totalBeds);
+  const availableRooms = rooms.filter(
+    (r) => r.status !== "maintenance" && r.occupiedBeds < r.totalBeds,
+  );
   const [roomId, setRoomId] = useState(availableRooms[0]?.id ?? "");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -263,7 +302,9 @@ function OnboardTenantForm({
   }
 
   if (availableRooms.length === 0) {
-    return <p className="text-sm text-muted-foreground">No vacant beds available. Add a room first.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">No vacant beds available. Add a room first.</p>
+    );
   }
 
   return (

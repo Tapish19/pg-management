@@ -48,6 +48,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/use-notifications";
 import { GlobalSearch } from "./global-search";
+import { rolePages } from "@/lib/demo-role-access";
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -143,7 +144,7 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 
 function Sidebar({ role }: { role: Role }) {
   const { isDemo } = useAuth();
-  const items = NAV_BY_ROLE[role];
+  const items = NAV_BY_ROLE[role].filter((item) => !isDemo || rolePages(role).includes(item.to));
   return (
     <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="h-16 flex items-center px-5 border-b border-sidebar-border">
@@ -155,12 +156,14 @@ function Sidebar({ role }: { role: Role }) {
         </div>
         <NavList items={items} />
       </ScrollArea>
-      {isDemo && <div className="p-3 border-t border-sidebar-border">
-        <div className="rounded-lg bg-accent/60 p-3 text-xs text-accent-foreground">
-          <div className="font-semibold mb-0.5">Demo mode</div>
-          Data is seeded for preview. Switch roles from the top bar.
+      {isDemo && (
+        <div className="p-3 border-t border-sidebar-border">
+          <div className="rounded-lg bg-accent/60 p-3 text-xs text-accent-foreground">
+            <div className="font-semibold mb-0.5">Demo mode</div>
+            Data is seeded for preview. Switch roles from the top bar.
+          </div>
         </div>
-      </div>}
+      )}
     </aside>
   );
 }
@@ -171,7 +174,12 @@ function NotificationBell({ role }: { role: Role }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label={`Notifications: ${unread} unread`}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label={`Notifications: ${unread} unread`}
+        >
           <Bell className="h-5 w-5" />
           {unread > 0 && (
             <span className="absolute top-1.5 right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -190,8 +198,14 @@ function NotificationBell({ role }: { role: Role }) {
         <ScrollArea className="max-h-96">
           <div className="divide-y">
             {isLoading && <p className="p-3 text-sm">Loading notices...</p>}
-            {error && <p className="p-3 text-sm" role="alert">Could not load notices.</p>}
-            {!isLoading && !error && items.length === 0 && <p className="p-3 text-sm">No notifications yet.</p>}
+            {error && (
+              <p className="p-3 text-sm" role="alert">
+                Could not load notices.
+              </p>
+            )}
+            {!isLoading && !error && items.length === 0 && (
+              <p className="p-3 text-sm">No notifications yet.</p>
+            )}
             {items.slice(0, 6).map((n) => (
               <div key={n.id} className="p-3 flex gap-3">
                 <div
@@ -286,10 +300,12 @@ function UserMenu() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isDemo } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   if (!user) return null;
-  const items = NAV_BY_ROLE[user.role];
+  const items = NAV_BY_ROLE[user.role].filter(
+    (item) => !isDemo || rolePages(user.role).includes(item.to),
+  );
 
   return (
     <div className="min-h-screen bg-background">

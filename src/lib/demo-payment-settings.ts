@@ -7,10 +7,10 @@ export const demoPaymentMethodsSchema = z.object({
   stripe: z.boolean().default(false),
 });
 export type DemoPaymentMethod = keyof z.infer<typeof demoPaymentMethodsSchema>;
-export function readDemoPaymentMethods() {
+export function readDemoPaymentMethods(storage: Pick<Storage, "getItem"> = localStorage) {
   try {
     return demoPaymentMethodsSchema.parse(
-      JSON.parse(localStorage.getItem("pgone.demo.payment-methods.v1") ?? "{}"),
+      JSON.parse(storage.getItem("pgone.demo.payment-methods.v1") ?? "{}"),
     );
   } catch {
     return demoPaymentMethodsSchema.parse({});

@@ -18,7 +18,7 @@ import path from "path";
 // hosted libSQL database (e.g. Turso, https://turso.tech — free tier,
 // same @libsql/client driver, no code changes needed beyond this file).
 // Falls back to a local file for local development when unset.
-const client = process.env.TURSO_DATABASE_URL
+export const client = process.env.TURSO_DATABASE_URL
   ? createClient({
       url: process.env.TURSO_DATABASE_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -46,10 +46,20 @@ export function ensureMigrated(): Promise<void> {
         { sql: attendanceSql, when: journal.entries[2].when, snapshot: attendanceSnapshot },
       ],
       initialSnapshot,
-    ).catch((err) => {
-      migrationsReady = null; // allow retry on next request instead of caching a failure forever
-      throw err;
-    });
+    )
+      .then(async () => {
+        await client.batch(
+          [
+            `CREATE TABLE IF NOT EXISTS demo_workspaces (id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+            `CREATE TABLE IF NOT EXISTS kyc_documents (tenant_id TEXT PRIMARY KEY REFERENCES tenants(id), payload TEXT NOT NULL)`,
+          ],
+          "write",
+        );
+      })
+      .catch((err) => {
+        migrationsReady = null; // allow retry on next request instead of caching a failure forever
+        throw err;
+      });
   }
   return migrationsReady;
 }

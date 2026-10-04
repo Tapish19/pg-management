@@ -6,26 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { getOwnerSettings, updateOwnerSettings } from "@/lib/api/functions/settings-fns";
 import { toast } from "sonner";
 import { SampleDataCard } from "@/components/sample-data-card";
-import { demoPages } from "@/lib/demo-store";
-import {
-  readDemoPaymentMethods,
-  saveDemoPaymentMethods,
-  type DemoPaymentMethod,
-} from "@/lib/demo-payment-settings";
+import { DemoSharingCard, DemoRoleEditor } from "@/components/demo-workspace-settings";
+import { runDemoAction } from "@/lib/demo-sharing";
+import { readDemoPaymentMethods, type DemoPaymentMethod } from "@/lib/demo-payment-settings";
 import { z } from "zod";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import type { NotificationPreferences } from "@/lib/owner-settings";
 import {
   defaultNotificationPreferences,
@@ -104,6 +94,7 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
       else if (section === "rent") rentRulesSchema.parse(settings);
       else notificationPreferencesSchema.parse(settings.notifications);
       if (demoOwnerId) {
+        await runDemoAction("getDemoConfig");
         const current = readDemoSettings(demoOwnerId);
         const update =
           section === "organization"
@@ -111,14 +102,14 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
             : section === "rent"
               ? rentRulesSchema.parse(settings)
               : { notifications: notificationPreferencesSchema.parse(settings.notifications) };
-        localStorage.setItem(
-          demoSettingsKey(demoOwnerId),
-          JSON.stringify({ ...current, ...update }),
-        );
+        await runDemoAction("saveDemoConfig", {
+          key: demoSettingsKey(demoOwnerId),
+          value: { ...current, ...update },
+        });
         await queryClient.invalidateQueries({ queryKey: ["owner-settings", "demo", demoOwnerId] });
         await queryClient.invalidateQueries({ queryKey: ["owner-notifications"] });
         await queryClient.invalidateQueries({ queryKey: ["my-booking"] });
-        toast.success("Demo settings saved on this browser");
+        toast.success("Demo settings saved");
         return;
       }
       if (section === "organization")
@@ -172,6 +163,7 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
   return (
     <>
       <PageHeader title="Settings" description="Organization, payments, notifications & roles." />
+      {demoOwnerId && <DemoSharingCard />}
       {demoOwnerId ? (
         <p className="mb-4 text-sm text-muted-foreground">
           Demo mode: organization, rent rules and notification preferences save on this browser.
@@ -411,31 +403,9 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
                     <div className="text-xs text-muted-foreground">{d}</div>
                   </div>
                   {demoOwnerId ? (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button size="sm" variant="outline">
-                          View access
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>{r} access</DialogTitle>
-                        </DialogHeader>
-                        <p className="text-sm">{d}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {demoPages[
-                            r === "Owner / Admin" ? "admin" : r === "Tenant" ? "tenant" : "staff"
-                          ].map((path) => (
-                            <span key={path} className="rounded border px-2 py-1 text-sm">
-                              {path.slice(1).replaceAll("-", " ")}
-                            </span>
-                          ))}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Use the role switcher to explore this role's demo.
-                        </p>
-                      </DialogContent>
-                    </Dialog>
+                    <DemoRoleEditor
+                      role={r === "Owner / Admin" ? "admin" : r === "Tenant" ? "tenant" : "staff"}
+                    />
                   ) : (
                     <Button size="sm" variant="outline">
                       Edit
@@ -452,14 +422,23 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
 
 function DemoPaymentSettings() {
   const [methods, setMethods] = useState(readDemoPaymentMethods);
-  function change(key: DemoPaymentMethod, value: boolean) {
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    const refresh = () => setMethods(readDemoPaymentMethods());
+    window.addEventListener("demo-synced", refresh);
+    return () => window.removeEventListener("demo-synced", refresh);
+  }, []);
+  async function change(key: DemoPaymentMethod, value: boolean) {
+    setSaving(true);
     const next = { ...methods, [key]: value };
     try {
-      saveDemoPaymentMethods(next);
+      await runDemoAction("saveDemoConfig", { key: "pgone.demo.payment-methods.v1", value: next });
       setMethods(next);
       toast.success("Demo payment preference saved");
     } catch {
-      toast.error("Could not save browser preferences");
+      toast.error("Could not save demo payment preferences");
+    } finally {
+      setSaving(false);
     }
   }
   return (
@@ -473,6 +452,7 @@ function DemoPaymentSettings() {
           {key === "cash" || key === "upi" ? (
             <Switch
               aria-label={key}
+              disabled={saving}
               checked={methods[key]}
               onCheckedChange={(value) => change(key, value)}
             />
@@ -480,6 +460,7 @@ function DemoPaymentSettings() {
             <Button
               aria-label={`${methods[key] ? "Disconnect" : "Connect"} ${key} demo`}
               size="sm"
+              disabled={saving}
               variant="outline"
               onClick={() => change(key, !methods[key])}
             >
