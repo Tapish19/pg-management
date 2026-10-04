@@ -4,6 +4,8 @@ import initialSql from "../../../../drizzle/0000_violet_manta.sql?raw";
 import settingsSql from "../../../../drizzle/0001_owner_settings.sql?raw";
 import attendanceSql from "../../../../drizzle/0002_staff_attendance.sql?raw";
 import initialSnapshot from "../../../../drizzle/meta/0000_snapshot.json";
+import settingsSnapshot from "../../../../drizzle/meta/0001_snapshot.json";
+import attendanceSnapshot from "../../../../drizzle/meta/0002_snapshot.json";
 import journal from "../../../../drizzle/meta/_journal.json";
 import { createClient } from "@libsql/client";
 import * as schema from "./schema";
@@ -39,9 +41,9 @@ export function ensureMigrated(): Promise<void> {
     migrationsReady = migrateEmbedded(
       client,
       [
-        { sql: initialSql, when: journal.entries[0].when },
-        { sql: settingsSql, when: journal.entries[1].when },
-        { sql: attendanceSql, when: journal.entries[2].when },
+        { sql: initialSql, when: journal.entries[0].when, snapshot: initialSnapshot },
+        { sql: settingsSql, when: journal.entries[1].when, snapshot: settingsSnapshot },
+        { sql: attendanceSql, when: journal.entries[2].when, snapshot: attendanceSnapshot },
       ],
       initialSnapshot,
     ).catch((err) => {

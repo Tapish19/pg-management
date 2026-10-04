@@ -16,7 +16,12 @@ if (!process.argv.includes("--fixture-root")) {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), "pg-production-smoke-"));
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(import.meta.url), "--fixture-root", directory],
+    [
+      fileURLToPath(import.meta.url),
+      "--fixture-root",
+      directory,
+      ...(process.argv.includes("--preexisting-settings") ? ["--preexisting-settings"] : []),
+    ],
     { stdio: "inherit", windowsHide: true },
   );
   for (const name of fs.readdirSync(directory)) {
@@ -29,6 +34,31 @@ if (!process.argv.includes("--fixture-root")) {
   process.exit(result.status ?? 1);
 }
 const databaseFile = path.join(directory, "test.db");
+if (process.argv.includes("--preexisting-settings")) {
+  const seedClient = createClient({ url: `file:${databaseFile}` });
+  const journal = JSON.parse(fs.readFileSync("drizzle/meta/_journal.json", "utf8"));
+  for (const entry of journal.entries.slice(0, 2)) {
+    for (const sql of fs
+      .readFileSync(`drizzle/${entry.tag}.sql`, "utf8")
+      .split("--> statement-breakpoint")
+      .filter((sql) => sql.trim()))
+      await seedClient.execute(sql);
+  }
+  await seedClient.execute(
+    "CREATE TABLE __drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric)",
+  );
+  await seedClient.execute({
+    sql: "INSERT INTO __drizzle_migrations (hash,created_at) VALUES (?,?)",
+    args: ["baseline-test", journal.entries[0].when],
+  });
+  await seedClient.execute(
+    "INSERT INTO owners (id,name,email,password_hash) VALUES ('upgrade-owner','Upgrade owner','upgrade@example.com','unused')",
+  );
+  await seedClient.execute(
+    "INSERT INTO owner_settings (owner_id,organization_name,contact_email) VALUES ('upgrade-owner','Preserve these settings','upgrade@example.com')",
+  );
+  seedClient.close();
+}
 const listener = net.createServer();
 listener.listen(0, "127.0.0.1");
 await once(listener, "listening");
@@ -116,6 +146,15 @@ try {
   }
   assert.ok(ready, `Production server starts: ${serverLog}`);
   client = createClient({ url: `file:${databaseFile}` });
+  if (process.argv.includes("--preexisting-settings"))
+    assert.equal(
+      (
+        await client.execute(
+          "SELECT organization_name FROM owner_settings WHERE owner_id = 'upgrade-owner'",
+        )
+      ).rows[0].organization_name,
+      "Preserve these settings",
+    );
   assert.equal(
     (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
     JSON.parse(fs.readFileSync("drizzle/meta/_journal.json", "utf8")).entries.length,

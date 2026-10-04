@@ -130,6 +130,15 @@ const snapshot = JSON.parse(
 const migrations = journal.entries.map((entry) => ({
   sql: fs.readFileSync(new URL(`../drizzle/${entry.tag}.sql`, import.meta.url), "utf8"),
   when: entry.when,
+  snapshot: JSON.parse(
+    fs.readFileSync(
+      new URL(
+        `../drizzle/meta/${String(entry.idx).padStart(4, "0")}_snapshot.json`,
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ),
 }));
 // libSQL's native Windows transaction handles close at process exit. Run the tests
 // in a child process, then remove their temporary databases after all handles close.
@@ -203,6 +212,87 @@ test("startup adopts an unmanaged database without losing its existing owner", a
   } finally {
     client.close();
   }
+});
+
+test("startup recovers an existing settings table whose migration was not recorded", async (t) => {
+  const client = temporaryClient(t);
+  await migrateEmbedded(client, migrations.slice(0, 1), snapshot);
+  await client.execute(migrations[1].sql);
+  await client.execute(
+    "INSERT INTO owners (id,name,email,password_hash) VALUES ('saved-owner','Owner','owner@example.com','hash')",
+  );
+  await client.execute(
+    "INSERT INTO owner_settings (owner_id,organization_name,contact_email,due_day) VALUES ('saved-owner','Keep this organization','contact@example.com',12)",
+  );
+  await migrateEmbedded(client, migrations, snapshot);
+  await migrateEmbedded(client, migrations, snapshot);
+  assert.equal(
+    (await client.execute("SELECT organization_name FROM owner_settings")).rows[0]
+      .organization_name,
+    "Keep this organization",
+  );
+  assert.equal((await client.execute("SELECT due_day FROM owner_settings")).rows[0].due_day, 12);
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
+    migrations.length,
+  );
+  assert.equal(
+    (await client.execute("SELECT name FROM sqlite_master WHERE name = 'staff_attendance'")).rows
+      .length,
+    1,
+  );
+});
+
+test("startup adopts all existing tables without a migration journal", async (t) => {
+  const client = temporaryClient(t);
+  for (const migration of migrations)
+    for (const statement of migration.sql
+      .split("--> statement-breakpoint")
+      .filter((statement) => statement.trim()))
+      await client.execute(statement);
+  await migrateEmbedded(client, migrations, snapshot);
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
+    migrations.length,
+  );
+});
+
+test("an incompatible existing settings table is preserved and not marked migrated", async (t) => {
+  const client = temporaryClient(t);
+  await migrateEmbedded(client, migrations.slice(0, 1), snapshot);
+  await client.execute(
+    "CREATE TABLE owner_settings (owner_id text PRIMARY KEY, organization_name text)",
+  );
+  await client.execute("INSERT INTO owner_settings VALUES ('owner','Keep me')");
+  await assert.rejects(
+    migrateEmbedded(client, migrations, snapshot),
+    /schema differs at owner_settings/,
+  );
+  assert.equal(
+    (await client.execute("SELECT organization_name FROM owner_settings")).rows[0]
+      .organization_name,
+    "Keep me",
+  );
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
+    1,
+  );
+});
+
+test("existing attendance requires its compound primary key before adoption", async (t) => {
+  const client = temporaryClient(t);
+  await migrateEmbedded(client, migrations.slice(0, 2), snapshot);
+  await client.execute(
+    "CREATE TABLE staff_attendance (staff_id text NOT NULL, date text NOT NULL, status text NOT NULL)",
+  );
+  await assert.rejects(
+    migrateEmbedded(client, migrations, snapshot),
+    /staff_attendance primary key/,
+  );
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM __drizzle_migrations")).rows[0].count,
+    2,
+  );
 });
 
 test("startup refuses incompatible old tables and leaves them untouched", async (t) => {
