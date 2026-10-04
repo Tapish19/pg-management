@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectCurrentBooking } from "../src/lib/booking-selection.ts";
+import { selectCurrentBooking, newestFirst, distinctTenantBookings } from "../src/lib/booking-selection.ts";
+import { parseBrowseSearch, includesSearch } from "../src/lib/search-filters.ts";
+import { noticeVisibleToRoom } from "../src/lib/notice-audience.ts";
+import { parseNotificationReads, notificationStorageKey } from "../src/lib/notification-state.ts";
 import { toCsv } from "../src/lib/csv.ts";
 import { hasVacantBed, occupancyAfterStatusChange } from "../src/lib/room-availability.ts";
 import { QueryClient } from "@tanstack/react-query";
@@ -84,4 +87,45 @@ test("account cache cleanup cancels pending work and removes previous account da
   assert.equal(aborted, true);
   assert.equal(client.getQueryData(["properties", "mine"]), undefined);
   assert.equal(client.getQueryData(["my-booking"]), undefined);
+});
+
+test("homepage search retains valid filters and rejects invalid URL inputs", () => {
+  assert.deepEqual(parseBrowseSearch({ q: "  HSR Layout ", sharing: "2", budget: "12000" }), { q: "HSR Layout", sharing: 2, budget: 12000 });
+  assert.deepEqual(parseBrowseSearch({ q: [], sharing: "99", budget: "NaN" }), { q: undefined, sharing: undefined, budget: undefined });
+  assert.equal(parseBrowseSearch({ budget: "0" }).budget, 0);
+  assert.equal(parseBrowseSearch({ budget: "" }).budget, undefined);
+});
+
+test("global search ignores case and surrounding whitespace and tolerates missing data", () => {
+  assert.equal(includesSearch("  ALICE ", undefined, "Alice Smith", "Room 101"), true);
+  assert.equal(includesSearch("101", undefined, "Alice Smith", "Room 101"), true);
+  assert.equal(includesSearch("other", null, undefined, "Alice Smith"), false);
+});
+
+test("room-specific notices stay private to the addressed room", () => {
+  assert.equal(noticeVisibleToRoom("All tenants", undefined), true);
+  assert.equal(noticeVisibleToRoom("Room 101", "101"), true);
+  assert.equal(noticeVisibleToRoom("Room 101", "10"), false);
+  assert.equal(noticeVisibleToRoom("Room 101", undefined), false);
+  assert.equal(noticeVisibleToRoom("Staff only", "101"), false);
+});
+
+test("tenant list shows one relevant stay per tenant, including former residents", () => {
+  const active = { id: "active", tenantId: "alice", status: "active", createdAt: "2026-01-01" };
+  const former = { id: "former", tenantId: "bob", status: "checked_out", createdAt: "2026-01-01" };
+  assert.deepEqual(distinctTenantBookings([
+    active, { id: "new-pending", tenantId: "alice", status: "pending", createdAt: "2026-10-01" }, former,
+  ]), [active, former]);
+});
+
+test("recent bookings sort by creation time without mutating cached rows", () => {
+  const rows = [{ id: "older", createdAt: "2026-01-01" }, { id: "newer", createdAt: "2026-10-01" }];
+  assert.equal(newestFirst(rows)[0].id, "newer");
+  assert.equal(rows[0].id, "older");
+});
+
+test("notification read state rejects malformed storage and is isolated per account", () => {
+  assert.deepEqual(parseNotificationReads('{"n1":true,"n2":false,"bad":"true"}'), { n1: true, n2: false });
+  for (const raw of ["broken", "null", "[]", "42"]) assert.deepEqual(parseNotificationReads(raw), {});
+  assert.notEqual(notificationStorageKey("owner-a"), notificationStorageKey("owner-b"));
 });

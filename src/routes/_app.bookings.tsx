@@ -17,8 +17,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listOwnerBookings, updateBookingStatus } from "@/lib/api/functions/bookings-fns";
 import { toast } from "sonner";
+import { includesSearch } from "@/lib/search-filters";
 
-export const Route = createFileRoute("/_app/bookings")({ component: BookingsPage });
+export const Route = createFileRoute("/_app/bookings")({
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({ q: typeof search.q === "string" ? search.q : undefined }),
+  component: BookingsPage,
+});
 
 type BookingStatus = "pending" | "confirmed" | "active" | "checked_out" | "cancelled";
 
@@ -31,19 +35,21 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function BookingsPage() {
+  const q = Route.useSearch().q ?? "";
   const queryClient = useQueryClient();
   const groups = ["all", "pending", "confirmed", "active", "checked_out", "cancelled"];
 
-  const { data: bookings, isLoading } = useQuery({
+  const { data: bookingRows, isLoading } = useQuery({
     queryKey: ["bookings", "mine"],
     queryFn: () => listOwnerBookings(),
   });
+  const bookings = (bookingRows ?? []).filter((booking) => includesSearch(q, booking.id, booking.tenant?.name, booking.property?.name, booking.room?.roomNumber));
 
   async function handleStatusChange(id: string, status: string) {
     try {
       await updateBookingStatus({ data: { id, status: status as BookingStatus } });
       queryClient.invalidateQueries({ queryKey: ["bookings", "mine"] });
-      queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["tenants"] });
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
       queryClient.invalidateQueries({ queryKey: ["properties"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });

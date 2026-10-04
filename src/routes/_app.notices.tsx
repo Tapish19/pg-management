@@ -19,6 +19,7 @@ import { Megaphone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { listOwnerNotices, createNotice } from "@/lib/api/functions/notices-fns";
 import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
+import { listRooms } from "@/lib/api/functions/rooms-fns";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/notices")({ component: NoticesPage });
@@ -114,6 +115,7 @@ function NewNoticeForm({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("All tenants");
+  const { data: rooms } = useQuery({ queryKey: ["rooms", propertyId], queryFn: () => listRooms({ data: { propertyId } }), enabled: !!propertyId });
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -138,7 +140,7 @@ function NewNoticeForm({
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <Label className="mb-1.5 block">Property</Label>
-        <Select value={propertyId} onValueChange={setPropertyId}>
+        <Select value={propertyId} onValueChange={(value) => { setPropertyId(value); setAudience("All tenants"); }}>
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -161,7 +163,13 @@ function NewNoticeForm({
       </div>
       <div>
         <Label className="mb-1.5 block">Audience</Label>
-        <Input value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="All tenants" />
+        <Select value={audience} onValueChange={setAudience}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All tenants">All tenants</SelectItem>
+            {[...new Set((rooms ?? []).map((room) => room.roomNumber))].map((number) => <SelectItem key={number} value={`Room ${number}`}>Room {number}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
       <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? "Posting…" : "Post notice"}

@@ -6,6 +6,7 @@ import { bookings, rooms, tenants, properties } from "../db/schema";
 import { genId } from "../id";
 import { hasVacantBed, occupancyAfterStatusChange } from "../../room-availability";
 import { getSession } from "../auth";
+import { newestFirst, distinctTenantBookings } from "../../booking-selection";
 
 function requireSession() {
   const session = getSession();
@@ -20,7 +21,7 @@ export const listOwnerBookings = createServerFn({ method: "GET" }).handler(async
   const propertyMap = new Map(ownerProperties.map((p) => [p.id, p]));
 
   const allBookings = await db.select().from(bookings).all();
-  const relevant = allBookings.filter((b) => propertyMap.has(b.propertyId));
+  const relevant = newestFirst(allBookings.filter((b) => propertyMap.has(b.propertyId)));
 
   const allTenants = await db.select().from(tenants).all();
   const tenantMap = new Map(allTenants.map((t) => [t.id, t]));
@@ -43,7 +44,7 @@ export const listOwnerTenants = createServerFn({ method: "GET" }).handler(async 
   const propertyMap = new Map(ownerProperties.map((p) => [p.id, p]));
 
   const allBookings = await db.select().from(bookings).all();
-  const relevant = allBookings.filter((b) => propertyMap.has(b.propertyId));
+  const relevant = distinctTenantBookings(allBookings.filter((b) => propertyMap.has(b.propertyId)));
 
   const allTenants = await db.select().from(tenants).all();
   const tenantMap = new Map(allTenants.map((t) => [t.id, t]));

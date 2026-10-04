@@ -13,10 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROPERTIES, formatCurrency } from "@/lib/demo-data";
+import { PROPERTIES, ROOMS, formatCurrency } from "@/lib/demo-data";
+import { parseBrowseSearch } from "@/lib/search-filters";
 import { MapPin, Search, Star, Wifi, UtensilsCrossed, Snowflake, ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/browse")({
+  validateSearch: parseBrowseSearch,
   head: () => ({
     meta: [
       { title: "Browse PGs — PG One" },
@@ -30,11 +32,16 @@ export const Route = createFileRoute("/browse")({
 });
 
 function Browse() {
-  const [q, setQ] = useState("");
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const q = search.q ?? "";
+  const sharing = search.sharing;
+  const setQ = (value: string) => navigate({ search: (previous) => ({ ...previous, q: value }), replace: true });
   const [gender, setGender] = useState<string>("any");
   const [food, setFood] = useState(false);
   const [ac, setAc] = useState(false);
-  const [maxBudget, setMaxBudget] = useState<number[]>([15000]);
+  const maxBudget = [search.budget ?? 15000];
+  const setMaxBudget = (value: number[]) => navigate({ search: (previous) => ({ ...previous, budget: value[0] }), replace: true });
 
   const results = useMemo(
     () =>
@@ -45,9 +52,10 @@ function Browse() {
         if (food && !p.food) return false;
         if (ac && !p.ac) return false;
         if (p.rentFrom > maxBudget[0]) return false;
+        if (sharing && !ROOMS.some((room) => room.propertyId === p.id && room.sharing === sharing && room.rent <= maxBudget[0])) return false;
         return true;
       }),
-    [q, gender, food, ac, maxBudget],
+    [q, gender, food, ac, maxBudget[0], sharing],
   );
 
   return (
@@ -102,10 +110,20 @@ function Browse() {
                 <Slider
                   value={maxBudget}
                   onValueChange={setMaxBudget}
-                  min={5000}
-                  max={25000}
+                  min={0}
+                  max={Math.max(25000, maxBudget[0])}
                   step={500}
                 />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Sharing</div>
+                <Select value={sharing ? String(sharing) : "any"} onValueChange={(value) => navigate({ search: (previous) => ({ ...previous, sharing: value === "any" ? undefined : Number(value) }), replace: true })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any</SelectItem>
+                    {[1, 2, 3, 4].map((value) => <SelectItem key={value} value={String(value)}>{value}-sharing</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm">

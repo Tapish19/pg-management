@@ -57,6 +57,7 @@ function ExpensesPage() {
     try {
       await updateExpenseStatus({ data: { id, status } });
       queryClient.invalidateQueries({ queryKey: ["expenses", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update expense");
     }
@@ -84,6 +85,7 @@ function ExpensesPage() {
                 onCreated={() => {
                   setOpen(false);
                   queryClient.invalidateQueries({ queryKey: ["expenses", "mine"] });
+                  queryClient.invalidateQueries({ queryKey: ["reports"] });
                 }}
               />
             </DialogContent>

@@ -31,10 +31,8 @@ import {
 import { useState, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
 import type { Role } from "@/lib/demo-data";
-import { NOTIFICATIONS } from "@/lib/demo-data";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -48,6 +46,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useNotifications } from "@/hooks/use-notifications";
+import { GlobalSearch } from "./global-search";
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -166,12 +166,12 @@ function Sidebar({ role }: { role: Role }) {
 }
 
 function NotificationBell({ role }: { role: Role }) {
-  const items = NOTIFICATIONS.filter((n) => n.role === role || n.role === "all");
+  const { items, isLoading, error } = useNotifications();
   const unread = items.filter((n) => !n.read).length;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" aria-label={`Notifications: ${unread} unread`}>
           <Bell className="h-5 w-5" />
           {unread > 0 && (
             <span className="absolute top-1.5 right-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -189,6 +189,9 @@ function NotificationBell({ role }: { role: Role }) {
         </div>
         <ScrollArea className="max-h-96">
           <div className="divide-y">
+            {isLoading && <p className="p-3 text-sm">Loading notices...</p>}
+            {error && <p className="p-3 text-sm" role="alert">Could not load notices.</p>}
+            {!isLoading && !error && items.length === 0 && <p className="p-3 text-sm">No notifications yet.</p>}
             {items.slice(0, 6).map((n) => (
               <div key={n.id} className="p-3 flex gap-3">
                 <div
@@ -311,13 +314,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Sheet>
 
             <div className="hidden md:flex items-center gap-2 flex-1 max-w-md">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tenants, rooms, bookings…"
-                  className="pl-9 h-9 bg-muted/40"
-                />
-              </div>
+              <GlobalSearch />
             </div>
 
             <div className="flex-1 md:hidden" />

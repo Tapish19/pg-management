@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { notices, properties } from "../db/schema";
+import { notices, properties, rooms } from "../db/schema";
 import { genId } from "../id";
 import { getSession } from "../auth";
 
@@ -28,7 +28,7 @@ const noticeInput = z.object({
   propertyId: z.string(),
   title: z.string().min(2),
   body: z.string().min(2),
-  audience: z.string().default("All tenants"),
+  audience: z.string().regex(/^(All tenants|Room .+)$/).default("All tenants"),
   postedBy: z.string(),
 });
 
@@ -38,6 +38,10 @@ export const createNotice = createServerFn({ method: "POST" })
     const session = requireSession();
     const property = await db.select().from(properties).where(eq(properties.id, data.propertyId)).get();
     if (!property || property.ownerId !== session.ownerId) throw new Error("Property not found");
+    if (data.audience !== "All tenants") {
+      const propertyRooms = await db.select().from(rooms).where(eq(rooms.propertyId, data.propertyId)).all();
+      if (!propertyRooms.some((room) => data.audience === `Room ${room.roomNumber}`)) throw new Error("Audience room not found");
+    }
 
     const id = genId("N");
     await db.insert(notices).values({ id, ...data });

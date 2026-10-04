@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { parseBrowseSearch } from "@/lib/search-filters";
 import {
   Building2,
   Search,
@@ -79,6 +81,10 @@ function TopNav() {
 }
 
 function Hero() {
+  const navigate = useNavigate();
+  const [q, setQ] = useState("");
+  const [sharing, setSharing] = useState("");
+  const [budget, setBudget] = useState("");
   return (
     <section className="relative overflow-hidden">
       <div
@@ -107,26 +113,27 @@ function Hero() {
           </p>
         </div>
         <Card className="ticket-edge mt-10 p-4 sm:p-5 border-dashed">
-          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
+          <form className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={(event) => {
+            event.preventDefault();
+            navigate({ to: "/browse", search: parseBrowseSearch({ q, sharing, budget }) });
+          }}>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="City or area (e.g. HSR Layout)" />
+              <Input value={q} onChange={(event) => setQ(event.target.value)} className="pl-9" placeholder="City or area (e.g. HSR Layout)" />
             </div>
             <div className="relative">
               <BedDouble className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Sharing type (1, 2, 3, 4)" />
+              <Input type="number" min={1} max={4} step={1} value={sharing} onChange={(event) => setSharing(event.target.value)} className="pl-9" placeholder="Sharing type (1, 2, 3, 4)" />
             </div>
             <div className="relative">
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Budget (max ₹)" />
+              <Input type="number" min={0} max={1000000} value={budget} onChange={(event) => setBudget(event.target.value)} className="pl-9" placeholder="Budget (max ₹)" />
             </div>
-            <Button asChild size="lg" className="gap-2">
-              <Link to="/browse">
+            <Button type="submit" size="lg" className="gap-2">
                 <Search className="h-4 w-4" />
                 Search
-              </Link>
             </Button>
-          </div>
+          </form>
         </Card>
         <div className="mt-6 flex flex-wrap gap-2.5">
           {["Verified listings", "Zero brokerage", "Free cancellation", "24×7 support"].map((t) => (

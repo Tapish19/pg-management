@@ -39,7 +39,10 @@ const RISK_BAND_TONE: Record<string, "success" | "warning" | "destructive"> = {
   high: "destructive",
 };
 
-export const Route = createFileRoute("/_app/tenants")({ component: TenantsPage });
+export const Route = createFileRoute("/_app/tenants")({
+  validateSearch: (search: Record<string, unknown>): { q?: string } => ({ q: typeof search.q === "string" ? search.q : undefined }),
+  component: TenantsPage,
+});
 
 function formatCurrency(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
@@ -47,7 +50,9 @@ function formatCurrency(n: number) {
 
 function TenantsPage() {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const search = Route.useSearch().q ?? "";
+  const navigate = Route.useNavigate();
+  const setSearch = (q: string) => navigate({ search: { q }, replace: true });
   const queryClient = useQueryClient();
 
   const { data: tenantRows, isLoading } = useQuery({
@@ -81,7 +86,7 @@ function TenantsPage() {
   async function handleKyc(id: string, kycStatus: "verified" | "pending" | "missing") {
     try {
       await updateTenantKyc({ data: { id, kycStatus } });
-      queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["tenants"] });
       toast.success("KYC updated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update KYC");
@@ -110,7 +115,7 @@ function TenantsPage() {
                 properties={properties || []}
                 onCreated={() => {
                   setOpen(false);
-                  queryClient.invalidateQueries({ queryKey: ["tenants", "mine"] });
+                  queryClient.invalidateQueries({ queryKey: ["tenants"] });
                   queryClient.invalidateQueries({ queryKey: ["rooms"] });
                   queryClient.invalidateQueries({ queryKey: ["properties"] });
                   queryClient.invalidateQueries({ queryKey: ["bookings"] });

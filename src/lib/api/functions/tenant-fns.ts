@@ -5,6 +5,7 @@ import { db } from "../db";
 import { bookings, complaints, foodMenu, notices, payments, properties, rooms, tenants, visitors } from "../db/schema";
 import { genId } from "../id";
 import { selectCurrentBooking } from "../../booking-selection";
+import { noticeVisibleToRoom } from "../../notice-audience";
 import {
   createTenantSessionToken,
   setTenantSessionCookie,
@@ -162,7 +163,9 @@ export const getMyNotices = createServerFn({ method: "GET" }).handler(async () =
   const session = requireTenantSession();
   const booking = await getPrimaryBooking(session.tenantId);
   if (!booking) return [];
-  return db.select().from(notices).where(eq(notices.propertyId, booking.propertyId)).all();
+  const room = await db.select().from(rooms).where(eq(rooms.id, booking.roomId)).get();
+  return (await db.select().from(notices).where(eq(notices.propertyId, booking.propertyId)).all())
+    .filter((notice) => noticeVisibleToRoom(notice.audience, room?.roomNumber));
 });
 
 // My payment / invoice history, across all my bookings

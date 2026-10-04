@@ -115,7 +115,7 @@ function PropertiesPage() {
                 </div>
                 <div className="mt-4 flex gap-2">
                   <Button variant="outline" size="sm" className="flex-1" asChild>
-                    <Link to="/rooms">Rooms</Link>
+                    <Link to="/rooms" search={{ propertyId: p.id }}>Rooms</Link>
                   </Button>
                 </div>
               </div>

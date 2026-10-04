@@ -21,13 +21,18 @@ import { listOwnerProperties } from "@/lib/api/functions/properties-fns";
 import { listRooms, createRoom } from "@/lib/api/functions/rooms-fns";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_app/rooms")({ component: RoomsPage });
+export const Route = createFileRoute("/_app/rooms")({
+  validateSearch: (search: Record<string, unknown>): { propertyId?: string } => ({ propertyId: typeof search.propertyId === "string" ? search.propertyId : undefined }),
+  component: RoomsPage,
+});
 
 function formatCurrency(n: number) {
   return `₹${n.toLocaleString("en-IN")}`;
 }
 
 function RoomsPage() {
+  const { propertyId } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -77,7 +82,8 @@ function RoomsPage() {
           Add a property first, then come back to add rooms to it.
         </Card>
       ) : (
-        <Tabs defaultValue={firstPropertyId}>
+        <Tabs value={properties.some((p) => p.id === propertyId) ? propertyId : firstPropertyId}
+          onValueChange={(selectedId) => navigate({ search: { propertyId: selectedId }, replace: true })}>
           <TabsList className="flex-wrap h-auto">
             {properties.map((p) => (
               <TabsTrigger key={p.id} value={p.id}>
