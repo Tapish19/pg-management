@@ -165,6 +165,25 @@ assert.ok(
 saveDemoPaymentMethods({ cash: true, upi: false, razorpay: false, stripe: false });
 demoCall("verifyPayment", { paymentId: order.paymentId });
 const tenantWhatsapp = demoCall("getDemoWhatsapp") as DemoWhatsappInbox;
+demoCall("undoDemoPayment", { paymentId: order.paymentId });
+assert.ok(
+  (demoCall("getMyPayments") as { id: string; status: string; paidAt: string | null }[]).some(
+    (p) => p.id === order.paymentId && p.status === "pending" && p.paidAt === null,
+  ),
+);
+assert.ok(
+  !(demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.some(
+    (m) => m.event === `payment:${order.paymentId}`,
+  ),
+);
+assert.throws(
+  () => demoCall("undoDemoPayment", { paymentId: "another-persons-payment" }),
+  /Only your/,
+);
+role("admin");
+assert.throws(() => demoCall("undoDemoPayment", { paymentId: order.paymentId }), /not available/);
+role("tenant");
+demoCall("verifyPayment", { paymentId: order.paymentId });
 assert.equal(
   tenantWhatsapp.messages.filter((m) => m.event === `payment:${order.paymentId}`).length,
   1,

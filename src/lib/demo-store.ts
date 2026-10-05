@@ -302,6 +302,7 @@ export function demoCall(
     "askAssistantFn",
     "createPaymentOrder",
     "verifyPayment",
+    "undoDemoPayment",
   ];
   const ownerOnly =
     /^(createProperty|updateProperty|deleteProperty|createRoom|updateRoom|deleteRoom|onboardTenant|updateTenantKyc|createStaff|updateStaff|updateStaffStatus|deleteStaff|recordStaffAttendance|listStaffAttendance|createExpense|updateExpenseStatus|deleteNotice|listOwnerPayments|getOwnerReports|getOwnerRoomMatches|listTenantRiskScores|getTenantRiskScore)$/;
@@ -1091,6 +1092,42 @@ export function demoCall(
         currency: "INR",
         keyId: "demo",
       };
+    }
+    case "undoDemoPayment": {
+      const payment = s.payments.find(
+        (p) => p.id === text("paymentId") && p.bookingId === myBooking().id,
+      );
+      if (
+        !payment ||
+        payment.type !== "rent" ||
+        payment.month !== new Date().toISOString().slice(0, 7)
+      )
+        throw new Error("Only your current month's demo rent can be undone");
+      if (payment.status !== "paid") return { ok: true };
+      payment.status = "pending";
+      payment.paidAt = null;
+      payment.razorpayOrderId = null;
+      payment.razorpayPaymentId = null;
+      whatsapp.messages = whatsapp.messages.filter(
+        (message) =>
+          ![`payment:${payment.id}`, `rent:${payment.bookingId}:${payment.month}`].includes(
+            message.event,
+          ),
+      );
+      const event = `payment-undo:${id()}`;
+      sendWhatsapp(
+        "admin",
+        s.profiles.admin.id,
+        event,
+        `${user.name}'s demo rent payment for ${payment.month} was undone. ₹${payment.amount.toLocaleString("en-IN")} is pending again. No real money was moved.`,
+      );
+      sendWhatsapp(
+        "tenant",
+        user.id,
+        event,
+        `Your demo rent payment for ${payment.month} was undone and is pending again. You can repeat the payment demo. No real money was moved.`,
+      );
+      return save();
     }
     case "verifyPayment": {
       const methods = readDemoPaymentMethods(storage);

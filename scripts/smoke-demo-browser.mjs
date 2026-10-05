@@ -228,6 +228,17 @@ try {
   await page.keyboard.press("Escape");
   await page.goto(`${base}/settings`);
   await page.waitForURL("**/dashboard");
+  await page.goto(`${base}/pay-rent`);
+  await page.getByRole("button", { name: "Undo demo payment", exact: true }).click();
+  await page.getByText("Demo payment undone. Rent is pending again.", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole("button", { name: /^Pay ₹/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Pay ₹/ })
+    .click();
+  await page.getByText("Payment successful", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
   assert.equal(requests.length, 0, "Demo pages must never call authenticated server functions");
   // Two isolated browsers share persistent records through a capability link.
   await page.goto(`${base}/auth`);

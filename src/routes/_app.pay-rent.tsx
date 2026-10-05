@@ -48,6 +48,7 @@ function PayRentPage() {
   const [open, setOpen] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [demoMethods] = useState(() => {
     const methods = readDemoPaymentMethods();
     return (Object.keys(methods) as DemoPaymentMethod[]).filter((key) => methods[key]);
@@ -73,6 +74,28 @@ function PayRentPage() {
       p.month === rentMonth &&
       p.status === "paid",
   );
+  async function undoPayment() {
+    const payment = paymentHistory?.find(
+      (p) =>
+        p.bookingId === booking?.booking.id &&
+        p.type === "rent" &&
+        p.month === rentMonth &&
+        p.status === "paid",
+    );
+    if (!isDemo || !payment) return;
+    setUndoing(true);
+    try {
+      await runDemoAction("undoDemoPayment", { paymentId: payment.id });
+      setPaid(false);
+      setOpen(false);
+      await queryClient.invalidateQueries();
+      toast.success("Demo payment undone. Rent is pending again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not undo demo payment");
+    } finally {
+      setUndoing(false);
+    }
+  }
 
   async function handlePay() {
     if (!booking?.booking || !eligible || alreadyPaid) return;
@@ -255,6 +278,17 @@ function PayRentPage() {
               </Dialog>
             </div>
           </Card>
+
+          {isDemo && alreadyPaid && (
+            <div className="mb-4 space-y-2">
+              <Button variant="outline" disabled={undoing} onClick={undoPayment}>
+                {undoing ? "Undoing…" : "Undo demo payment"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Return this month's simulated rent to Pending so you can try the demo again.
+              </p>
+            </div>
+          )}
 
           {isDemo && !demoMethods.length && (
             <p role="alert" className="mb-4 text-sm text-muted-foreground">

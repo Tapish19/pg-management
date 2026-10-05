@@ -533,6 +533,33 @@ try {
   );
   await shared("admin", "setDemoWhatsapp", { enabled: false });
   assert.equal(JSON.parse((await shared("admin", "sendDemoRentReminders")).result).count, 0);
+  await shared("admin", "setDemoWhatsapp", { enabled: true });
+  const currentDemoRent = JSON.parse((await shared("tenant", "getMyPayments")).result).find(
+    (payment) => payment.type === "rent" && payment.month === new Date().toISOString().slice(0, 7),
+  );
+  await shared("tenant", "verifyPayment", { paymentId: currentDemoRent.id });
+  assert.ok(
+    JSON.parse((await shared("admin", "getDemoWhatsapp")).result).messages.some(
+      (message) => message.event === `payment:${currentDemoRent.id}`,
+    ),
+  );
+  await shared("tenant", "undoDemoPayment", { paymentId: currentDemoRent.id });
+  assert.equal(
+    JSON.parse((await shared("tenant", "getMyPayments")).result).find(
+      (payment) => payment.id === currentDemoRent.id,
+    ).status,
+    "pending",
+  );
+  assert.ok(
+    !JSON.parse((await shared("admin", "getDemoWhatsapp")).result).messages.some(
+      (message) => message.event === `payment:${currentDemoRent.id}`,
+    ),
+  );
+  await assert.rejects(
+    shared("staff", "undoDemoPayment", { paymentId: currentDemoRent.id }),
+    /not available|disabled access/,
+  );
+  await shared("tenant", "verifyPayment", { paymentId: currentDemoRent.id });
   await assert.rejects(shared("staff", "setDemoWhatsapp", { enabled: true }), /owner/);
   await shared("admin", "setDemoWhatsapp", { enabled: true });
   assert.ok(JSON.parse((await shared("admin", "sendDemoRentReminders")).result).count > 0);
