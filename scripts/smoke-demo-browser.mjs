@@ -211,6 +211,21 @@ try {
     .getByRole("button", { name: /^Pay ₹/ })
     .click();
   await page.getByText("Payment successful", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^WhatsApp demo/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByText(/Your .*rent payment.*is confirmed/)
+    .waitFor();
+  await page.getByRole("button", { name: "Mark messages read", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[role="dialog"] button') &&
+      [...document.querySelectorAll('[role="dialog"] button')].some(
+        (button) => button.textContent.includes("Mark messages read") && button.disabled,
+      ),
+  );
+  await page.keyboard.press("Escape");
   await page.goto(`${base}/settings`);
   await page.waitForURL("**/dashboard");
   assert.equal(requests.length, 0, "Demo pages must never call authenticated server functions");
@@ -219,6 +234,26 @@ try {
   await page.getByRole("button", { name: /^Owner \/ Admin Full analytics/ }).click();
   await page.waitForURL("**/dashboard");
   await page.goto(`${base}/settings`);
+  await page.getByRole("tab", { name: "Notifications", exact: true }).click();
+  await page.getByRole("button", { name: "Send demo preview", exact: true }).click();
+  await page.getByText("Preview added to your WhatsApp demo inbox", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^WhatsApp demo/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByText(/Welcome to PG One's WhatsApp demo/)
+    .waitFor();
+  await page
+    .getByRole("dialog")
+    .getByText(/paid .*rent.*simulated demo payment/)
+    .waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("switch", { name: "Enable demo WhatsApp messages", exact: true }).click();
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll("button")].some(
+      (button) => button.textContent === "Send demo preview" && button.disabled,
+    ),
+  );
+  await page.getByRole("switch", { name: "Enable demo WhatsApp messages", exact: true }).click();
   await page.getByRole("button", { name: "Create share link", exact: true }).click();
   const linkInput = page.getByLabel("Demo share link", { exact: true });
   await linkInput.waitFor();
@@ -229,17 +264,29 @@ try {
   await resident.goto(link);
   await resident.getByRole("button", { name: /^Tenant Room/ }).click();
   await resident.waitForURL("**/dashboard");
+  await resident.getByRole("button", { name: /^WhatsApp demo/ }).click();
+  await resident
+    .getByRole("dialog")
+    .getByText(/Your .*rent payment.*is confirmed/)
+    .waitFor();
+  assert.equal(
+    await resident
+      .getByRole("dialog")
+      .getByText(/Welcome to PG One's WhatsApp demo/)
+      .count(),
+    0,
+    "Owner messages must not appear in tenant inbox",
+  );
+  await resident.keyboard.press("Escape");
   await resident.goto(`${base}/profile`);
   await resident.locator("form").first().getByRole("textbox").first().fill("Shared Resident");
   await resident.getByRole("button", { name: "Save changes", exact: true }).click();
   await resident.getByText("Profile updated", { exact: true }).waitFor();
-  await resident
-    .getByLabel("ID document (PDF, PNG or JPEG, up to 2 MB)")
-    .setInputFiles({
-      name: "sample-id.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("%PDF-1.4\nSample demo identity document\n%%EOF"),
-    });
+  await resident.getByLabel("ID document (PDF, PNG or JPEG, up to 2 MB)").setInputFiles({
+    name: "sample-id.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\nSample demo identity document\n%%EOF"),
+  });
   await resident.getByRole("button", { name: "Upload document", exact: true }).click();
   await resident
     .getByText("Document uploaded. Your owner can review it now.", { exact: true })

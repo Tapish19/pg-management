@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { useNotifications } from "@/hooks/use-notifications";
 import { GlobalSearch } from "./global-search";
 import { rolePages } from "@/lib/demo-role-access";
+import { DemoWhatsappButton } from "@/components/demo-whatsapp";
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -336,6 +337,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex-1 md:hidden" />
             <div className="flex items-center gap-1.5">
               <RoleSwitcher />
+              <DemoWhatsappButton />
               <NotificationBell role={user.role} />
               <UserMenu />
             </div>

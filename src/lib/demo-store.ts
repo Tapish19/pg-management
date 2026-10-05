@@ -22,6 +22,8 @@ import {
   notificationPreferencesSchema,
 } from "./owner-settings";
 export type DemoStorage = Pick<Storage, "getItem" | "setItem">;
+import type { DemoWhatsappState } from "./demo-whatsapp";
+import { rentDueDate } from "./owner-settings";
 
 export const DEMO_SESSION_KEY = "pgone.session.v1";
 const DATA_KEY = "pgone.demo.data.v1";
@@ -43,6 +45,7 @@ type State = {
   preferences: Record<string, Record<string, unknown>>;
   comments: Record<string, string[]>;
   documents?: Record<string, KycDocument>;
+  whatsapp?: DemoWhatsappState;
 };
 const timestamp = () => new Date().toISOString();
 const id = () => `demo-${crypto.randomUUID()}`;
@@ -307,7 +310,13 @@ export function demoCall(
     (ownerOnly.test(name) && role !== "admin") ||
     (role === "tenant" &&
       !tenantOnly.includes(name) &&
-      !["saveProfile", "getKycDocument", "getDemoConfig"].includes(name))
+      ![
+        "saveProfile",
+        "getKycDocument",
+        "getDemoConfig",
+        "getDemoWhatsapp",
+        "readDemoWhatsapp",
+      ].includes(name))
   )
     throw new Error("This action is not available for your demo role");
   const visible = (propertyId: string) => role === "admin" || propertyId === user.propertyId;
@@ -334,12 +343,111 @@ export function demoCall(
     storage.setItem(DATA_KEY, JSON.stringify(s));
     return result;
   };
+  const whatsapp = (s.whatsapp ??= { enabled: true, messages: [] });
+  const sendWhatsapp = (
+    recipientRole: D.Role,
+    recipientId: string,
+    event: string,
+    body: string,
+  ) => {
+    if (
+      !whatsapp.enabled ||
+      whatsapp.messages.some(
+        (m) =>
+          m.event === event && m.recipientId === recipientId && m.recipientRole === recipientRole,
+      )
+    )
+      return false;
+    const recipient =
+      recipientRole === "admin"
+        ? s.profiles.admin
+        : recipientRole === "tenant"
+          ? s.tenants.find((t) => t.id === recipientId)
+          : recipientId === s.profiles.staff.id
+            ? s.profiles.staff
+            : s.staff.find((t) => t.id === recipientId);
+    if (!recipient) return false;
+    whatsapp.messages.unshift({
+      id: id(),
+      event,
+      recipientId,
+      recipientRole,
+      recipientName: recipient.name,
+      phone: recipient.phone ?? "",
+      body,
+      createdAt: timestamp(),
+      read: false,
+    });
+    whatsapp.messages = whatsapp.messages.slice(0, 200);
+    return true;
+  };
   const preferenceFor = (tenantId: string) => {
     const saved = preferencesInput.safeParse(s.preferences[tenantId]);
     return saved.success ? saved.data : null;
   };
   const preferences = preferenceFor(user.id);
   switch (name) {
+    case "getDemoWhatsapp":
+      return {
+        enabled: whatsapp.enabled,
+        messages: whatsapp.messages.filter(
+          (m) => m.recipientRole === role && m.recipientId === user.id,
+        ),
+      };
+    case "readDemoWhatsapp":
+      whatsapp.messages.forEach((m) => {
+        if (m.recipientRole === role && m.recipientId === user.id) m.read = true;
+      });
+      return save();
+    case "setDemoWhatsapp":
+      if (role !== "admin") throw new Error("Only the owner can manage WhatsApp notifications");
+      whatsapp.enabled = z.boolean().parse(data.enabled);
+      return save();
+    case "previewDemoWhatsapp":
+      if (role !== "admin") throw new Error("Only the owner can send a preview");
+      sendWhatsapp(
+        "admin",
+        user.id,
+        `preview:${id()}`,
+        "Welcome to PG One's WhatsApp demo. Verified payments, booking changes and complaint updates will appear here. These messages are simulated; nothing is sent to a phone.",
+      );
+      return save();
+    case "sendDemoRentReminders": {
+      if (role !== "admin") throw new Error("Only the owner can generate rent reminders");
+      const month = new Date().toISOString().slice(0, 7);
+      const today = new Date().toISOString().slice(0, 10);
+      const settings = JSON.parse(storage.getItem("pgone.demo.settings.v1.u-admin") ?? "{}");
+      const dueDate = rentDueDate(month, settings.dueDay ?? 5);
+      let count = 0;
+      for (const booking of s.bookings) {
+        if (
+          !["active", "confirmed"].includes(booking.status) ||
+          booking.checkInDate > today ||
+          (booking.checkOutDate && booking.checkOutDate < today)
+        )
+          continue;
+        if (
+          s.payments.some(
+            (p) =>
+              p.bookingId === booking.id &&
+              p.type === "rent" &&
+              p.month === month &&
+              p.status === "paid",
+          )
+        )
+          continue;
+        if (
+          sendWhatsapp(
+            "tenant",
+            booking.tenantId,
+            `rent:${booking.id}:${month}`,
+            `Rent reminder: ₹${booking.monthlyRent.toLocaleString("en-IN")} for ${month}, due ${dueDate}. Open Pay Rent in PG One to review your balance. Demo only; no money is charged.`,
+          )
+        )
+          count++;
+      }
+      return save({ count });
+    }
     case "getDemoConfig":
       return Object.fromEntries(
         [
@@ -705,14 +813,35 @@ export function demoCall(
         assignedTo: "u-staff",
         createdAt: timestamp(),
       });
+      sendWhatsapp(
+        "admin",
+        s.profiles.admin.id,
+        `complaint-new:${complaintId}`,
+        `New complaint: “${text("title")}” at ${property(propertyId).name}. Open Complaints to review it.`,
+      );
+      if (propertyId === s.profiles.staff.propertyId)
+        sendWhatsapp(
+          "staff",
+          s.profiles.staff.id,
+          `task:${complaintId}`,
+          `New assigned task: “${text("title")}”. Open My Tasks to review and update it.`,
+        );
       return save({ id: complaintId });
     }
     case "updateComplaint": {
       const c = s.complaints.find((c) => c.id === text("id"));
       if (!c) throw new Error("Complaint not found");
       property(c.propertyId);
+      const previousStatus = c.status;
       if (data.status) c.status = text("status");
       if (data.assignedTo) c.assignedTo = text("assignedTo");
+      if (c.status !== previousStatus && c.tenantId)
+        sendWhatsapp(
+          "tenant",
+          c.tenantId,
+          `complaint:${c.id}:${c.status}`,
+          `Your complaint “${c.title}” is now ${c.status.replaceAll("-", " ")}. View its details in My Complaints.`,
+        );
       return save();
     }
     case "createMyVisitor":
@@ -775,7 +904,15 @@ export function demoCall(
       const r = room(b.roomId);
       const change = occupancyAfterStatusChange(r, b.status, text("status"));
       Object.assign(r, change);
+      const previousStatus = b.status;
       b.status = text("status");
+      if (b.status !== previousStatus)
+        sendWhatsapp(
+          "tenant",
+          b.tenantId,
+          `booking:${b.id}:${b.status}`,
+          `Your booking at ${property(b.propertyId).name}, room ${r.roomNumber}, is now ${b.status.replaceAll("_", " ")}. Move-in date: ${b.checkInDate}.`,
+        );
       return save();
     }
     case "updateTenantKyc": {
@@ -965,8 +1102,23 @@ export function demoCall(
         (p) => p.id === text("paymentId") && p.bookingId === myBooking().id,
       );
       if (!p) throw new Error("Payment not found");
+      if (p.status === "paid") return { ok: true };
       p.status = "paid";
       p.paidAt = timestamp();
+      const tenant = s.tenants.find((t) => t.id === user.id)!;
+      const amount = `₹${p.amount.toLocaleString("en-IN")}`;
+      sendWhatsapp(
+        "admin",
+        s.profiles.admin.id,
+        `payment:${p.id}`,
+        `${tenant.name} paid ${amount} for ${p.month} rent. Payment reference: ${p.id}. This is a simulated demo payment.`,
+      );
+      sendWhatsapp(
+        "tenant",
+        user.id,
+        `payment:${p.id}`,
+        `Your ${amount} rent payment for ${p.month} is confirmed. Reference: ${p.id}. Demo receipt: no money was charged.`,
+      );
       return save();
     }
     case "askAssistantFn": {

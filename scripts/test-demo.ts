@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { DemoWhatsappInbox } from "../src/lib/demo-whatsapp";
 import { readDemoPaymentMethods, saveDemoPaymentMethods } from "../src/lib/demo-payment-settings";
 import { computeCompatibility, preferencesInput } from "../src/lib/roommate-compatibility";
 import {
@@ -163,6 +164,18 @@ assert.ok(
 );
 saveDemoPaymentMethods({ cash: true, upi: false, razorpay: false, stripe: false });
 demoCall("verifyPayment", { paymentId: order.paymentId });
+const tenantWhatsapp = demoCall("getDemoWhatsapp") as DemoWhatsappInbox;
+assert.equal(
+  tenantWhatsapp.messages.filter((m) => m.event === `payment:${order.paymentId}`).length,
+  1,
+);
+demoCall("verifyPayment", { paymentId: order.paymentId });
+assert.equal(
+  (demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.filter(
+    (m) => m.event === `payment:${order.paymentId}`,
+  ).length,
+  1,
+);
 assert.ok(
   (demoCall("getMyPayments") as { id: string; status: string }[]).some(
     (p) => p.id === order.paymentId && p.status === "paid",
@@ -215,6 +228,41 @@ assert.throws(
       base64: btoa("invalid"),
     }),
   /content/,
+);
+role("admin");
+const ownerWhatsapp = demoCall("getDemoWhatsapp") as DemoWhatsappInbox;
+demoCall("updateBookingStatus", { id: booking.booking.id, status: "confirmed" });
+role("tenant");
+assert.ok(
+  (demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.some(
+    (message) => message.event === `booking:${booking.booking.id}:confirmed`,
+  ),
+);
+role("admin");
+assert.equal(
+  ownerWhatsapp.messages.filter((m) => m.event === `payment:${order.paymentId}`).length,
+  1,
+);
+assert.ok(ownerWhatsapp.messages.every((m) => m.recipientRole === "admin"));
+assert.ok((demoCall("sendDemoRentReminders") as { count: number }).count > 0);
+assert.equal((demoCall("sendDemoRentReminders") as { count: number }).count, 0);
+demoCall("setDemoWhatsapp", { enabled: false });
+const beforePreview = (demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.length;
+demoCall("previewDemoWhatsapp");
+assert.equal((demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.length, beforePreview);
+demoCall("setDemoWhatsapp", { enabled: true });
+demoCall("previewDemoWhatsapp");
+assert.equal((demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.length, beforePreview + 1);
+demoCall("readDemoWhatsapp");
+assert.ok((demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.every((m) => m.read));
+role("tenant");
+assert.throws(() => demoCall("sendDemoRentReminders"), /not available/);
+assert.ok((demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.some((m) => !m.read));
+assert.ok(
+  !(demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.some((m) =>
+    m.event.startsWith("rent:"),
+  ),
+  "Paid tenant must not get rent reminders",
 );
 role("admin");
 demoCall("saveDemoConfig", {

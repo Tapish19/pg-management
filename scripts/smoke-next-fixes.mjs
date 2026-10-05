@@ -509,6 +509,34 @@ try {
   const sharedNotices = JSON.parse((await shared("tenant", "getMyNotices")).result);
   assert.ok(sharedNotices.some((notice) => notice.title === "Shared notice one"));
   assert.ok(sharedNotices.some((notice) => notice.title === "Shared notice two"));
+  const demoTicket = JSON.parse(
+    (
+      await shared("tenant", "createMyComplaint", {
+        title: "WhatsApp plumbing test",
+        category: "plumbing",
+        priority: "medium",
+      })
+    ).result,
+  );
+  const ownerInbox = JSON.parse((await shared("admin", "getDemoWhatsapp")).result);
+  assert.ok(ownerInbox.messages.some((message) => message.body.includes("WhatsApp plumbing test")));
+  const staffInbox = JSON.parse((await shared("staff", "getDemoWhatsapp")).result);
+  assert.ok(staffInbox.messages.some((message) => message.event === `task:${demoTicket.id}`));
+  assert.ok(staffInbox.messages.every((message) => message.recipientRole === "staff"));
+  await shared("staff", "updateComplaint", { id: demoTicket.id, status: "resolved" });
+  const residentInbox = JSON.parse((await shared("tenant", "getDemoWhatsapp")).result);
+  assert.ok(residentInbox.messages.some((message) => message.body.includes("resolved")));
+  await shared("staff", "updateComplaint", { id: demoTicket.id, status: "resolved" });
+  assert.equal(
+    JSON.parse((await shared("tenant", "getDemoWhatsapp")).result).messages.length,
+    residentInbox.messages.length,
+  );
+  await shared("admin", "setDemoWhatsapp", { enabled: false });
+  assert.equal(JSON.parse((await shared("admin", "sendDemoRentReminders")).result).count, 0);
+  await assert.rejects(shared("staff", "setDemoWhatsapp", { enabled: true }), /owner/);
+  await shared("admin", "setDemoWhatsapp", { enabled: true });
+  assert.ok(JSON.parse((await shared("admin", "sendDemoRentReminders")).result).count > 0);
+  assert.equal(JSON.parse((await shared("admin", "sendDemoRentReminders")).result).count, 0);
   await shared("admin", "saveDemoConfig", {
     key: "pgone.demo.roles.v1",
     value: { staff: ["/dashboard", "/profile"], tenant: ["/dashboard", "/profile"] },

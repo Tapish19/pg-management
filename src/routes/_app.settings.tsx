@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { SampleDataCard } from "@/components/sample-data-card";
 import { DemoSharingCard, DemoRoleEditor } from "@/components/demo-workspace-settings";
 import { runDemoAction } from "@/lib/demo-sharing";
+import { DemoWhatsappSettings } from "@/components/demo-whatsapp";
 import { readDemoPaymentMethods, type DemoPaymentMethod } from "@/lib/demo-payment-settings";
 import { z } from "zod";
 import type { NotificationPreferences } from "@/lib/owner-settings";
@@ -166,7 +167,8 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
       {demoOwnerId && <DemoSharingCard />}
       {demoOwnerId ? (
         <p className="mb-4 text-sm text-muted-foreground">
-          Demo mode: organization, rent rules and notification preferences save on this browser.
+          Demo mode: organization, rent rules and notification preferences save in your demo
+          workspace.
         </p>
       ) : (
         <SampleDataCard />
@@ -357,6 +359,7 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
           )}
         </TabsContent>
         <TabsContent value="notify" className="mt-4">
+          {demoOwnerId && <DemoWhatsappSettings />}
           <Card className="p-6 max-w-2xl space-y-4">
             {[
               ["rent", "Rent due reminders"],
