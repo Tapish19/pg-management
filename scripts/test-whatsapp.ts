@@ -14,6 +14,12 @@ const env = {
 };
 const config = whatsappTestConfig(env)!;
 assert.equal(config.recipient, "919876543210");
+assert.equal(
+  whatsappTestConfig({ ...env, WHATSAPP_DEMO_PASSCODE: `  ${env.WHATSAPP_DEMO_PASSCODE}\n` })
+    ?.passcode,
+  config.passcode,
+);
+assert.equal(whatsappTestConfig({ ...env, WHATSAPP_DEMO_PASSCODE: "             " }), null);
 assert.equal(whatsappTestConfig({ ...env, WHATSAPP_DEMO_ENABLED: "false" }), null);
 assert.equal(whatsappTestConfig({ ...env, WHATSAPP_DEMO_PASSCODE: "short" }), null);
 assert.equal(whatsappTestConfig({ ...env, WHATSAPP_TEST_RECIPIENT: "not-a-phone" }), null);
@@ -85,6 +91,28 @@ await assert.rejects(
     !error.message.includes(env.WHATSAPP_ACCESS_TOKEN) && error.message.includes("HTTP 500"),
 );
 const now = 1_000_000;
+let paddedSends = 0;
+await sendWhatsappTest(
+  config,
+  `  ${env.WHATSAPP_DEMO_PASSCODE}\n`,
+  async () => {},
+  async () => {
+    paddedSends++;
+    return Response.json({ messages: [{ id: "wamid.padded-test" }] });
+  },
+);
+assert.equal(paddedSends, 1, "Ignore pasted whitespace around a valid passcode");
+await assert.rejects(
+  sendWhatsappTest(
+    config,
+    "private demo-passcode",
+    async () => {},
+    async () => {
+      throw new Error("Must never reach Meta for a different passcode");
+    },
+  ),
+  /Incorrect/,
+);
 assert.throws(() => checkWhatsappTestLimits([{ sentAt: now - 59_999 }], now), /60 seconds/);
 assert.throws(
   () =>

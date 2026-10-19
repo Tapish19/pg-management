@@ -5,7 +5,7 @@ export function whatsappTestConfig(env: Record<string, string | undefined>): Con
   const token = env.WHATSAPP_ACCESS_TOKEN?.trim();
   const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const recipient = env.WHATSAPP_TEST_RECIPIENT?.replace(/[\s()+-]/g, "");
-  const passcode = env.WHATSAPP_DEMO_PASSCODE;
+  const passcode = env.WHATSAPP_DEMO_PASSCODE?.trim();
   if (
     env.WHATSAPP_DEMO_ENABLED !== "true" ||
     !token ||
@@ -30,8 +30,10 @@ export async function sendWhatsappTest(
       "WhatsApp test sending is not configured. Follow the WhatsApp setup guide on the server.",
     );
   const digest = (value: string) => createHash("sha256").update(value).digest();
-  if (!timingSafeEqual(digest(passcode), digest(config.passcode)))
-    throw new Error("Incorrect WhatsApp demo passcode.");
+  if (!timingSafeEqual(digest(passcode.trim()), digest(config.passcode)))
+    throw new Error(
+      "Incorrect WhatsApp demo passcode. It does not match the value loaded by this deployment. If you changed it in Render, wait for deployment to finish and try again.",
+    );
   // Reserve before sending, including failed/uncertain requests, to avoid accidental duplicates.
   await reserve();
   let response: Response;

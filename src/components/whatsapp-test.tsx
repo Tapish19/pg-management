@@ -16,6 +16,7 @@ export function WhatsappTest() {
     retry: false,
   });
   const [passcode, setPasscode] = useState("");
+  const [showPasscode, setShowPasscode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [failed, setFailed] = useState(false);
@@ -37,6 +38,7 @@ export function WhatsappTest() {
         `Meta accepted the Hello World message for ${result.recipient}. Check WhatsApp on your phone; acceptance does not confirm delivery.`,
       );
       setPasscode("");
+      setShowPasscode(false);
       setCooldownUntil(Date.now() + 60_000);
     } catch (error) {
       setFailed(true);
@@ -71,7 +73,7 @@ export function WhatsappTest() {
           <Label htmlFor="whatsapp-demo-passcode">Private demo passcode</Label>
           <Input
             id="whatsapp-demo-passcode"
-            type="password"
+            type={showPasscode ? "text" : "password"}
             autoComplete="off"
             maxLength={200}
             value={passcode}
@@ -79,6 +81,19 @@ export function WhatsappTest() {
             placeholder="Enter your demo passcode"
             required
           />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-pressed={showPasscode}
+            onClick={() => setShowPasscode((value) => !value)}
+          >
+            {showPasscode ? "Hide passcode" : "Show passcode"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Use the WHATSAPP_DEMO_PASSCODE value saved in Render. Spaces at the beginning or end are
+            ignored.
+          </p>
           <Button type="submit" disabled={busy || !passcode || cooldownUntil > Date.now()}>
             {busy
               ? "Sending…"
