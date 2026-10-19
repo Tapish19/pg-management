@@ -1,5 +1,6 @@
 import { createDemoWorkspace, sharedDemoAction } from "./api/functions/demo-sharing-fns";
 import { demoCall, demoRole } from "./demo-store";
+import { toast } from "sonner";
 const KEY = "pgone.shared-demo.v1";
 export function sharedDemoId() {
   return localStorage.getItem(KEY);
@@ -29,6 +30,9 @@ export async function runDemoAction(name: string, input: unknown = {}): Promise<
   if (!id || !role) return demoCall(name, input);
   const response = await sharedDemoAction({ data: { id, role, name, input } });
   apply(response.entries);
+  if (response.whatsapp?.error) toast.error(`Action saved. ${response.whatsapp.error}`);
+  else if (response.whatsapp?.status === "accepted")
+    toast.success("Demo update accepted by WhatsApp for your test phone");
   return JSON.parse(response.result);
 }
 export async function shareDemo() {

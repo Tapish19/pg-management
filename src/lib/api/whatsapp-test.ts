@@ -1,6 +1,12 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
-type Config = { token: string; phoneNumberId: string; recipient: string; passcode: string };
+export type WhatsappConfig = {
+  token: string;
+  phoneNumberId: string;
+  recipient: string;
+  passcode: string;
+};
+type Config = WhatsappConfig;
 export function whatsappTestConfig(env: Record<string, string | undefined>): Config | null {
   const token = env.WHATSAPP_ACCESS_TOKEN?.trim();
   const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -25,6 +31,22 @@ export async function sendWhatsappTest(
   reserve: () => Promise<void>,
   request: typeof fetch = fetch,
 ) {
+  verifyWhatsappPasscode(config, passcode);
+  await reserve();
+  return sendWhatsappPayload(
+    config!,
+    {
+      type: "template",
+      template: { name: "hello_world", language: { code: "en_US" } },
+    },
+    request,
+  );
+}
+
+export function verifyWhatsappPasscode(
+  config: Config | null,
+  passcode: string,
+): asserts config is Config {
   if (!config)
     throw new Error(
       "WhatsApp test sending is not configured. Follow the WhatsApp setup guide on the server.",
@@ -34,8 +56,13 @@ export async function sendWhatsappTest(
     throw new Error(
       "Incorrect WhatsApp demo passcode. It does not match the value loaded by this deployment. If you changed it in Render, wait for deployment to finish and try again.",
     );
-  // Reserve before sending, including failed/uncertain requests, to avoid accidental duplicates.
-  await reserve();
+}
+
+export async function sendWhatsappPayload(
+  config: Config,
+  message: Record<string, unknown>,
+  request: typeof fetch = fetch,
+) {
   let response: Response;
   try {
     response = await request(`https://graph.facebook.com/v25.0/${config.phoneNumberId}/messages`, {
@@ -44,8 +71,7 @@ export async function sendWhatsappTest(
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to: config.recipient,
-        type: "template",
-        template: { name: "hello_world", language: { code: "en_US" } },
+        ...message,
       }),
       signal: AbortSignal.timeout(15_000),
     });
@@ -62,6 +88,10 @@ export async function sendWhatsappTest(
       throw new Error("Your Meta access token has expired or is invalid. Update it in Render.");
     if (code === 131030)
       throw new Error("Verify the configured recipient in Meta's test-recipient list.");
+    if (code === 131047)
+      throw new Error(
+        "Reply to your Meta test sender on WhatsApp, then try a new demo action. Custom messages need an open 24-hour customer service window.",
+      );
     throw new Error(
       `Meta did not accept the test message (HTTP ${response.status}). Check the sender, token, recipient and hello_world template in Meta.`,
     );

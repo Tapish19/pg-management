@@ -59,7 +59,8 @@ export function DemoWhatsappButton() {
         <div className="rounded-lg bg-emerald-50 p-3 text-emerald-950">
           <p className="font-medium">PG One Business · {user?.name}</p>
           <p className="text-xs">
-            Simulated messages only. Nothing is sent to WhatsApp or a real phone.
+            This inbox shows simulated records. If the owner enables automatic forwarding in
+            Settings, new demo events also send a real message to the configured test phone.
           </p>
         </div>
         {query.isLoading ? (
@@ -134,8 +135,8 @@ export function DemoWhatsappSettings() {
     <Card className="p-6 max-w-2xl space-y-3 mt-4">
       <h2 className="font-semibold">WhatsApp demo notifications</h2>
       <p className="text-sm text-muted-foreground">
-        Preview business notifications without an account, phone connection or message fees. Open
-        WhatsApp in the top bar to read each role's messages.
+        Open WhatsApp in the top bar to read each role's simulated messages. Real forwarding to your
+        test phone is controlled separately above.
       </p>
       {query.isError ? (
         <p role="alert">
@@ -157,8 +158,9 @@ export function DemoWhatsappSettings() {
           </label>
           <p className="text-sm text-muted-foreground">
             Payments notify the owner and tenant. Booking and complaint updates notify the tenant;
-            new complaints notify the owner and staff. Rent reminders are generated for unpaid
-            current-month bookings, once per booking.
+            new complaints notify the owner and staff. This switch controls event generation for
+            both the simulated inbox and any enabled real forwarding. Rent reminders are generated
+            for unpaid current-month bookings, once per booking.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

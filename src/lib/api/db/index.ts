@@ -53,6 +53,8 @@ export function ensureMigrated(): Promise<void> {
             `CREATE TABLE IF NOT EXISTS demo_workspaces (id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)`,
             `CREATE TABLE IF NOT EXISTS kyc_documents (tenant_id TEXT PRIMARY KEY REFERENCES tenants(id), payload TEXT NOT NULL)`,
             `CREATE TABLE IF NOT EXISTS whatsapp_test_attempts (id INTEGER PRIMARY KEY, sent_at INTEGER NOT NULL)`,
+            `CREATE TABLE IF NOT EXISTS whatsapp_demo_connections (workspace_id TEXT PRIMARY KEY REFERENCES demo_workspaces(id), expires_at INTEGER NOT NULL, target_key TEXT NOT NULL)`,
+            `CREATE TABLE IF NOT EXISTS whatsapp_event_outbox (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES demo_workspaces(id), action TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', error TEXT, created_at INTEGER NOT NULL)`,
           ],
           "write",
         );

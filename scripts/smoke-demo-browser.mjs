@@ -17,23 +17,29 @@ await once(listener, "listening");
 const port = listener.address().port;
 await new Promise((resolve) => listener.close(resolve));
 const base = `http://127.0.0.1:${port}`;
-const child = spawn(process.execPath, [".output/server/index.mjs"], {
-  windowsHide: true,
-  stdio: ["ignore", "pipe", "pipe"],
-  env: {
-    ...process.env,
-    PORT: String(port),
-    HOST: "127.0.0.1",
-    TURSO_DATABASE_URL: `file:${path.join(directory, "test.db")}`,
-    TURSO_AUTH_TOKEN: "",
-    JWT_SECRET: "demo-browser-test-secret",
-    WHATSAPP_DEMO_ENABLED: "true",
-    WHATSAPP_PHONE_NUMBER_ID: "123456",
-    WHATSAPP_ACCESS_TOKEN: "browser-fake-token",
-    WHATSAPP_TEST_RECIPIENT: "919876543210",
-    WHATSAPP_DEMO_PASSCODE: "browser-private-passcode",
+const captureFile = path.join(directory, "whatsapp-requests.jsonl");
+const child = spawn(
+  process.execPath,
+  ["--import", "./scripts/fixtures/mock-whatsapp.mjs", ".output/server/index.mjs"],
+  {
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      TURSO_DATABASE_URL: `file:${path.join(directory, "test.db")}`,
+      TURSO_AUTH_TOKEN: "",
+      JWT_SECRET: "demo-browser-test-secret",
+      WHATSAPP_DEMO_ENABLED: "true",
+      WHATSAPP_PHONE_NUMBER_ID: "123456",
+      WHATSAPP_ACCESS_TOKEN: "browser-fake-token",
+      WHATSAPP_TEST_RECIPIENT: "919876543210",
+      WHATSAPP_DEMO_PASSCODE: "browser-private-passcode",
+      WHATSAPP_CAPTURE_FILE: captureFile,
+    },
   },
-});
+);
 let logs = "",
   browser;
 child.stdout.on("data", (data) => (logs += data));
@@ -349,6 +355,31 @@ try {
     "Shared Resident",
   );
   await resident.getByRole("button", { name: "Download document", exact: true }).waitFor();
+  // Authorize once as the owner; a tenant action then produces a real provider request (mocked).
+  await page.goto(`${base}/settings`);
+  await page.getByRole("tab", { name: "Notifications", exact: true }).click();
+  await page.getByLabel("Automation passcode", { exact: true }).fill("browser-private-passcode");
+  await page.getByRole("checkbox", { name: /I replied to the test sender/ }).check();
+  await page.getByRole("button", { name: "Enable automatic messages", exact: true }).click();
+  await page.getByText(/Connected for one hour/).waitFor();
+  await resident.goto(`${base}/my-complaints`);
+  await resident.getByRole("button", { name: "Raise complaint", exact: true }).click();
+  await resident
+    .getByPlaceholder("Short summary", { exact: true })
+    .fill("Browser automatic WhatsApp leak");
+  await resident.getByRole("dialog").getByRole("button", { name: "Submit", exact: true }).click();
+  await resident.getByText("Complaint submitted", { exact: true }).waitFor();
+  const outbound = fs.readFileSync(captureFile, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(outbound.length, 1);
+  assert.equal(outbound[0].to, "919876543210");
+  assert.ok(outbound[0].text.body.includes("Browser automatic WhatsApp leak"));
+  assert.ok(outbound[0].text.body.includes("DEMO"));
+  await page.reload();
+  await page.getByRole("tab", { name: "Notifications", exact: true }).click();
+  await page.getByText("New complaint · Accepted by Meta", { exact: true }).waitFor();
+  await page.getByLabel("Automation passcode", { exact: true }).fill("browser-private-passcode");
+  await page.getByRole("button", { name: "Disable automatic messages", exact: true }).click();
+  await page.getByText("Automatic WhatsApp messages disabled.", { exact: true }).waitFor();
   await secondContext.close();
   assert.deepEqual(errors, [], "No browser runtime errors");
   console.log(

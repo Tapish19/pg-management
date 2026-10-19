@@ -16,6 +16,7 @@ import { DemoSharingCard, DemoRoleEditor } from "@/components/demo-workspace-set
 import { runDemoAction } from "@/lib/demo-sharing";
 import { DemoWhatsappSettings } from "@/components/demo-whatsapp";
 import { WhatsappTest } from "@/components/whatsapp-test";
+import { WhatsappAutomation } from "@/components/whatsapp-automation";
 import { readDemoPaymentMethods, type DemoPaymentMethod } from "@/lib/demo-payment-settings";
 import { z } from "zod";
 import type { NotificationPreferences } from "@/lib/owner-settings";
@@ -361,6 +362,7 @@ function SettingsEditor({ initial, demoOwnerId }: { initial: Settings; demoOwner
         </TabsContent>
         <TabsContent value="notify" className="mt-4">
           <WhatsappTest />
+          <WhatsappAutomation />
           {demoOwnerId && <DemoWhatsappSettings />}
           <Card className="p-6 max-w-2xl space-y-4">
             {[

@@ -66,24 +66,30 @@ const port = listener.address().port;
 await new Promise((resolve) => listener.close(resolve));
 const base = `http://127.0.0.1:${port}`;
 const secret = "isolated-smoke-test-secret";
-const child = spawn(process.execPath, [".output/server/index.mjs"], {
-  cwd: process.cwd(),
-  windowsHide: true,
-  env: {
-    ...process.env,
-    PORT: String(port),
-    HOST: "127.0.0.1",
-    TURSO_DATABASE_URL: `file:${databaseFile}`,
-    TURSO_AUTH_TOKEN: "",
-    JWT_SECRET: secret,
-    WHATSAPP_DEMO_ENABLED: "true",
-    WHATSAPP_PHONE_NUMBER_ID: "123456",
-    WHATSAPP_ACCESS_TOKEN: "isolated-fake-token",
-    WHATSAPP_TEST_RECIPIENT: "919876543210",
-    WHATSAPP_DEMO_PASSCODE: "isolated-private-passcode",
+const captureFile = path.join(directory, "whatsapp-requests.jsonl");
+const child = spawn(
+  process.execPath,
+  ["--import", "./scripts/fixtures/mock-whatsapp.mjs", ".output/server/index.mjs"],
+  {
+    cwd: process.cwd(),
+    windowsHide: true,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      TURSO_DATABASE_URL: `file:${databaseFile}`,
+      TURSO_AUTH_TOKEN: "",
+      JWT_SECRET: secret,
+      WHATSAPP_DEMO_ENABLED: "true",
+      WHATSAPP_PHONE_NUMBER_ID: "123456",
+      WHATSAPP_ACCESS_TOKEN: "isolated-fake-token",
+      WHATSAPP_TEST_RECIPIENT: "919876543210",
+      WHATSAPP_DEMO_PASSCODE: "isolated-private-passcode",
+      WHATSAPP_CAPTURE_FILE: captureFile,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
   },
-  stdio: ["ignore", "pipe", "pipe"],
-});
+);
 let serverLog = "";
 child.stdout.on("data", (data) => {
   serverLog += data;
@@ -625,6 +631,168 @@ try {
         })
       ).rows[0].payload,
     ).includes("Shared notice two"),
+  );
+  // Real event forwarding is exercised against an isolated mock Meta endpoint.
+  const autoWorkspace = await rpc("createDemoWorkspace", "POST", { entries: {} }, "");
+  const automatic = (role, name, input) =>
+    rpc("sharedDemoAction", "POST", { id: autoWorkspace.id, role, name, input }, "");
+  const forwarding = (extra = {}) =>
+    rpc(
+      "setWhatsappForwarding",
+      "POST",
+      {
+        workspaceId: autoWorkspace.id,
+        passcode: "isolated-private-passcode",
+        enabled: true,
+        repliedToSender: true,
+        ...extra,
+      },
+      "",
+    );
+  const captured = () =>
+    fs.existsSync(captureFile)
+      ? fs.readFileSync(captureFile, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse)
+      : [];
+  const beforeEnable = JSON.parse(
+    (
+      await automatic("tenant", "createMyComplaint", {
+        title: "Event before opt in",
+        category: "plumbing",
+        priority: "medium",
+      })
+    ).result,
+  );
+  assert.equal(captured().length, 0, "No event sends before explicit opt in");
+  await assert.rejects(forwarding({ passcode: "wrong" }), /Incorrect/);
+  await assert.rejects(forwarding({ repliedToSender: false }), /Reply/);
+  await assert.rejects(
+    forwarding({ workspaceId: "00000000-0000-4000-8000-000000000000" }),
+    /workspace not found/,
+  );
+  await forwarding();
+  assert.equal(captured().length, 0, "Enabling must not replay old messages");
+  await Promise.all([
+    automatic("staff", "updateComplaint", { id: beforeEnable.id, status: "resolved" }),
+    automatic("staff", "updateComplaint", { id: beforeEnable.id, status: "resolved" }),
+  ]);
+  assert.equal(captured().length, 1, "Concurrent duplicate updates send one notification");
+  assert.ok(captured()[0].text.body.includes("resolved"));
+  const payment = JSON.parse((await automatic("tenant", "getMyPayments")).result).find(
+    (item) => item.type === "rent" && item.month === new Date().toISOString().slice(0, 7),
+  );
+  await automatic("tenant", "verifyPayment", { paymentId: payment.id });
+  await automatic("tenant", "verifyPayment", { paymentId: payment.id });
+  assert.equal(captured().length, 2, "Repeated payment verification sends only one receipt");
+  assert.ok(captured()[1].text.body.includes("no money was charged"));
+  await automatic("admin", "updateBookingStatus", { id: "B-1042", status: "confirmed" });
+  assert.equal(captured().length, 3);
+  assert.ok(captured()[2].text.body.includes("confirmed"));
+  await automatic("admin", "sendDemoRentReminders");
+  await automatic("admin", "sendDemoRentReminders");
+  assert.equal(captured().length, 4, "Batch rent reminders send one digest and no duplicate");
+  assert.ok(captured()[3].text.body.includes("Rent reminder"));
+  const failure = await automatic("tenant", "createMyComplaint", {
+    title: "[simulate delivery failure] Leak",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(failure.whatsapp.status, "failed");
+  const failedTicketId = JSON.parse(failure.result).id;
+  assert.ok(
+    JSON.parse((await automatic("admin", "listOwnerComplaints")).result).some(
+      (item) => item.id === failedTicketId,
+    ),
+    "Provider failure never rolls back a complaint",
+  );
+  const throttled = await automatic("tenant", "createMyComplaint", {
+    title: "Rate limited event",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(throttled.whatsapp.status, "skipped");
+  assert.equal(captured().length, 5, "Rate limited notifications never call Meta");
+  assert.ok(
+    captured().every(
+      (item) =>
+        item.to === "919876543210" && item.type === "text" && item.text.body.includes("DEMO"),
+    ),
+  );
+  const forwardingStatus = await rpc(
+    "getWhatsappForwardingStatus",
+    "GET",
+    { workspaceId: autoWorkspace.id },
+    "",
+  );
+  assert.equal(forwardingStatus.active, true);
+  assert.ok(
+    forwardingStatus.history.some(
+      (item) => item.status === "failed" && item.error.includes("24-hour"),
+    ),
+  );
+  assert.ok(!JSON.stringify(forwardingStatus).includes("isolated-private-passcode"));
+  await forwarding({ enabled: false });
+  await automatic("tenant", "createMyComplaint", {
+    title: "Disabled event",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(captured().length, 5);
+  await forwarding();
+  await client.execute({
+    sql: "UPDATE whatsapp_demo_connections SET expires_at=0 WHERE workspace_id=?",
+    args: [autoWorkspace.id],
+  });
+  await automatic("tenant", "createMyComplaint", {
+    title: "Expired event",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(captured().length, 5);
+  assert.equal(
+    (await rpc("getWhatsappForwardingStatus", "GET", { workspaceId: autoWorkspace.id }, "")).active,
+    false,
+  );
+  await forwarding();
+  await client.execute({
+    sql: "UPDATE whatsapp_demo_connections SET target_key='different-recipient' WHERE workspace_id=?",
+    args: [autoWorkspace.id],
+  });
+  await automatic("tenant", "createMyComplaint", {
+    title: "Changed sender recipient",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(
+    captured().length,
+    5,
+    "A different configured target must be explicitly reauthorized",
+  );
+  await forwarding();
+  await client.execute({
+    sql: "UPDATE whatsapp_event_outbox SET created_at=?",
+    args: [Date.now() - 120_000],
+  });
+  for (let i = 0; i < 30; i++)
+    await client.execute({
+      sql: "INSERT INTO whatsapp_event_outbox(id,workspace_id,action,body,status,created_at) VALUES(?,?,?,?,?,?)",
+      args: [
+        `daily-limit-${i}`,
+        autoWorkspace.id,
+        "test",
+        "test",
+        "accepted",
+        Date.now() - 120_000,
+      ],
+    });
+  const dailyLimited = await automatic("tenant", "createMyComplaint", {
+    title: "Daily limited event",
+    category: "plumbing",
+    priority: "medium",
+  });
+  assert.equal(dailyLimited.whatsapp.status, "skipped");
+  assert.equal(captured().length, 5, "Daily limit also prevents provider calls");
+  console.log(
+    "Automatic WhatsApp events passed: opt in, fixed recipient, complaints, bookings, payments, reminders, concurrency, provider failure, limits, disable and expiry. All provider sends mocked.",
   );
   console.log(
     "Production smoke passed: migrations, owner isolation, saved settings, edits, KYC, notifications, attendance, atomic onboarding and public listing/detail pages.",
