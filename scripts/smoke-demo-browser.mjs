@@ -27,6 +27,11 @@ const child = spawn(process.execPath, [".output/server/index.mjs"], {
     TURSO_DATABASE_URL: `file:${path.join(directory, "test.db")}`,
     TURSO_AUTH_TOKEN: "",
     JWT_SECRET: "demo-browser-test-secret",
+    WHATSAPP_DEMO_ENABLED: "true",
+    WHATSAPP_PHONE_NUMBER_ID: "123456",
+    WHATSAPP_ACCESS_TOKEN: "browser-fake-token",
+    WHATSAPP_TEST_RECIPIENT: "919876543210",
+    WHATSAPP_DEMO_PASSCODE: "browser-private-passcode",
   },
 });
 let logs = "",
@@ -48,9 +53,17 @@ try {
   const page = await context.newPage();
   const errors = [],
     requests = [];
+  const compiledSources = fs
+    .readdirSync(".output/server/_ssr")
+    .filter((file) => file.endsWith(".mjs"))
+    .map((file) => fs.readFileSync(path.join(".output/server/_ssr", file), "utf8"))
+    .join("\n");
+  const statusId = compiledSources.match(/id: "([a-f0-9]+)",\s*name: "getWhatsappTestStatus"/)?.[1];
+  assert.ok(statusId, "Public WhatsApp configuration status is compiled");
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {
-    if (request.url().includes("/_serverFn/")) requests.push(request.url());
+    if (request.url().includes("/_serverFn/") && !request.url().includes(statusId))
+      requests.push(request.url());
   });
   await page.goto(`${base}/auth`);
   await page.getByRole("button", { name: /^Owner \/ Admin Full analytics/ }).click();
@@ -247,6 +260,14 @@ try {
   await page.goto(`${base}/settings`);
   await page.getByRole("tab", { name: "Notifications", exact: true }).click();
   await page.getByRole("button", { name: "Send demo preview", exact: true }).click();
+  await page.getByRole("heading", { name: "Send a real WhatsApp test", exact: true }).waitFor();
+  assert.equal(
+    await page.getByLabel("Private demo passcode", { exact: true }).getAttribute("type"),
+    "password",
+  );
+  await page.getByLabel("Private demo passcode", { exact: true }).fill("wrong-passcode");
+  await page.getByRole("button", { name: "Send test WhatsApp", exact: true }).click();
+  await page.getByRole("alert").filter({ hasText: "Incorrect WhatsApp demo passcode" }).waitFor();
   await page.getByText("Preview added to your WhatsApp demo inbox", { exact: true }).waitFor();
   await page.getByRole("button", { name: /^WhatsApp demo/ }).click();
   await page

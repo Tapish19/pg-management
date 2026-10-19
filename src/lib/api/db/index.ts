@@ -52,6 +52,7 @@ export function ensureMigrated(): Promise<void> {
           [
             `CREATE TABLE IF NOT EXISTS demo_workspaces (id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)`,
             `CREATE TABLE IF NOT EXISTS kyc_documents (tenant_id TEXT PRIMARY KEY REFERENCES tenants(id), payload TEXT NOT NULL)`,
+            `CREATE TABLE IF NOT EXISTS whatsapp_test_attempts (id INTEGER PRIMARY KEY, sent_at INTEGER NOT NULL)`,
           ],
           "write",
         );

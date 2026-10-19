@@ -76,6 +76,11 @@ const child = spawn(process.execPath, [".output/server/index.mjs"], {
     TURSO_DATABASE_URL: `file:${databaseFile}`,
     TURSO_AUTH_TOKEN: "",
     JWT_SECRET: secret,
+    WHATSAPP_DEMO_ENABLED: "true",
+    WHATSAPP_PHONE_NUMBER_ID: "123456",
+    WHATSAPP_ACCESS_TOKEN: "isolated-fake-token",
+    WHATSAPP_TEST_RECIPIENT: "919876543210",
+    WHATSAPP_DEMO_PASSCODE: "isolated-private-passcode",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -146,6 +151,19 @@ try {
     }
   }
   assert.ok(ready, `Production server starts: ${serverLog}`);
+  assert.deepEqual(await rpc("getWhatsappTestStatus", "GET", undefined, ""), { configured: true });
+  await assert.rejects(
+    rpc("sendWhatsappTestMessage", "POST", { passcode: "wrong-passcode" }, ""),
+    /Incorrect WhatsApp demo passcode/,
+  );
+  await assert.rejects(
+    rpc(
+      "sendWhatsappTestMessage",
+      "POST",
+      { passcode: "wrong-passcode", recipient: "919999999999" },
+      "",
+    ),
+  );
   for (const pathname of ["/", "/browse", "/auth", "/dashboard", "/settings"]) {
     const response = await fetch(`${base}${pathname}`, { signal: AbortSignal.timeout(15000) });
     assert.equal(response.status, 200, pathname);
@@ -158,6 +176,30 @@ try {
     assert.equal(await head.text(), "");
   }
   client = createClient({ url: `file:${databaseFile}` });
+  assert.equal(
+    (await client.execute("SELECT count(*) AS count FROM whatsapp_test_attempts")).rows[0].count,
+    0,
+    "Invalid passcodes do not reserve attempts",
+  );
+  await client.execute({
+    sql: "INSERT INTO whatsapp_test_attempts (sent_at) VALUES (?)",
+    args: [Date.now()],
+  });
+  await assert.rejects(
+    rpc("sendWhatsappTestMessage", "POST", { passcode: "isolated-private-passcode" }, ""),
+    /60 seconds/,
+  );
+  await client.execute("DELETE FROM whatsapp_test_attempts");
+  for (let i = 0; i < 10; i++)
+    await client.execute({
+      sql: "INSERT INTO whatsapp_test_attempts (sent_at) VALUES (?)",
+      args: [Date.now() - 120_000],
+    });
+  await assert.rejects(
+    rpc("sendWhatsappTestMessage", "POST", { passcode: "isolated-private-passcode" }, ""),
+    /10 WhatsApp test/,
+  );
+  await client.execute("DELETE FROM whatsapp_test_attempts");
   if (process.argv.includes("--preexisting-settings"))
     assert.equal(
       (
