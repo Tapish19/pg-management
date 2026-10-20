@@ -6,6 +6,7 @@ import net from "node:net";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { pathToFileURL } from "node:url";
+import { checkLocalDemoLogin, checkSharedDemoLogin } from "./fixtures/demo-login-checks.mjs";
 
 // Use an installed Playwright package or pass its directory with PLAYWRIGHT_PATH.
 const { chromium } = process.env.PLAYWRIGHT_PATH
@@ -67,6 +68,15 @@ try {
     .join("\n");
   const statusId = compiledSources.match(/id: "([a-f0-9]+)",\s*name: "getWhatsappTestStatus"/)?.[1];
   assert.ok(statusId, "Public WhatsApp configuration status is compiled");
+  const functionId = (name) => {
+    const id = compiledSources.match(new RegExp(`id: "([a-f0-9]+)",\\s*name: "${name}"`))?.[1];
+    assert.ok(id, `${name} is compiled`);
+    return id;
+  };
+  await checkLocalDemoLogin(browser, base, [
+    functionId("getCurrentSession"),
+    functionId("getCurrentTenantSession"),
+  ]);
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => {
     if (request.url().includes("/_serverFn/") && !request.url().includes(statusId))
@@ -297,8 +307,11 @@ try {
   const linkInput = page.getByLabel("Demo share link", { exact: true });
   await linkInput.waitFor();
   const link = await linkInput.inputValue();
+  await checkSharedDemoLogin(browser, link, functionId("sharedDemoAction"));
   const secondContext = await browser.newContext();
-  await secondContext.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
+  await secondContext.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) =>
+    route.abort(),
+  );
   const resident = await secondContext.newPage();
   resident.on("pageerror", (error) => errors.push(error.message));
   await resident.goto(link);
@@ -416,6 +429,14 @@ try {
   );
 } catch (error) {
   console.error(logs.slice(-3000));
+  if (browser) {
+    for (const context of browser.contexts()) {
+      for (const page of context.pages()) {
+        console.error("Browser failure:", page.url());
+        console.error(await page.locator('[role="dialog"]').allTextContents().catch(() => []));
+      }
+    }
+  }
   throw error;
 } finally {
   await browser?.close();

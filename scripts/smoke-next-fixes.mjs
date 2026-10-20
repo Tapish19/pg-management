@@ -604,6 +604,21 @@ try {
   const shared = (role, name, input) =>
     rpc("sharedDemoAction", "POST", { id: workspace.id, role, name, input }, "");
   await shared("admin", "listOwnerProperties");
+  const beforeSnapshot = await client.execute({
+    sql: "SELECT payload,updated_at FROM demo_workspaces WHERE id=?",
+    args: [workspace.id],
+  });
+  const snapshot = await shared("tenant", "snapshot");
+  assert.ok(snapshot.entries["pgone.demo.data.v1"]);
+  const afterSnapshot = await client.execute({
+    sql: "SELECT payload,updated_at FROM demo_workspaces WHERE id=?",
+    args: [workspace.id],
+  });
+  assert.deepEqual(
+    afterSnapshot.rows,
+    beforeSnapshot.rows,
+    "Login snapshots must not write to the workspace",
+  );
   await Promise.all([
     shared("admin", "createNotice", {
       propertyId: "p1",

@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { DEMO_USERS, type DemoUser, type Role } from "./demo-data";
 import {
@@ -53,16 +54,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isDemo, setIsDemo] = useState(false);
   const [user, setUser] = useState<DemoUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const authVersion = useRef(0);
 
   useEffect(() => {
+    const version = authVersion.current;
+    let cancelled = false;
+    const stale = () => cancelled || version !== authVersion.current;
     (async () => {
-      try {
-        await joinSharedDemo();
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not load shared demo");
-      }
       const savedDemoRole = demoRole();
       if (savedDemoRole) {
+        try {
+          await joinSharedDemo(savedDemoRole, true);
+        } catch (error) {
+          if (stale()) return;
+          toast.error(error instanceof Error ? error.message : "Could not load shared demo");
+          setLoading(false);
+          return;
+        }
+        if (stale()) return;
         setUser(demoProfile(savedDemoRole));
         setIsDemo(true);
         setLoading(false);
@@ -71,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Real (owner/admin) session takes priority
         const session = await getCurrentSession();
-        if (demoRole()) return;
+        if (stale()) return;
         if (session) {
           setUser({
             ...DEMO_USERS.admin,
@@ -86,10 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* not logged in via real auth */
       }
+      if (stale()) return;
       try {
         // Real tenant session comes next
         const tenantSession = await getCurrentTenantSession();
-        if (demoRole()) return;
+        if (stale()) return;
         if (tenantSession) {
           setUser({
             ...DEMO_USERS.tenant,
@@ -104,18 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* not logged in via real tenant auth */
       }
-      try {
-        const raw = typeof window !== "undefined" ? localStorage.getItem(KEY) : null;
-        if (raw) {
-          const parsed = JSON.parse(raw) as { role: Role };
-          setUser(demoProfile(parsed.role));
-          setIsDemo(true);
-        }
-      } catch {
-        /* ignore */
-      }
+      if (stale()) return;
       setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -142,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loginReal = async (email: string, password: string) => {
+    authVersion.current++;
     const owner = await loginFn({ data: { email, password } });
     queryClient.clear();
     localStorage.removeItem(KEY);
@@ -153,9 +158,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: owner.email,
       phone: owner.phone ?? "",
     });
+    setLoading(false);
   };
 
   const signupReal = async (name: string, email: string, password: string, phone?: string) => {
+    authVersion.current++;
     const owner = await signupFn({ data: { name, email, password, phone } });
     queryClient.clear();
     localStorage.removeItem(KEY);
@@ -167,9 +174,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: owner.email,
       phone: owner.phone ?? "",
     });
+    setLoading(false);
   };
 
   const loginTenantReal = async (email: string, phone: string) => {
+    authVersion.current++;
     const tenant = await loginTenantFn({ data: { email, phone } });
     queryClient.clear();
     localStorage.removeItem(KEY);
@@ -181,17 +190,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: tenant.email,
       phone: tenant.phone,
     });
+    setLoading(false);
   };
 
   const loginAs = async (role: Role) => {
+    const version = ++authVersion.current;
+    // No network is required for a local demo or a previously loaded workspace.
+    // New share links must load their records before we commit the selected role.
+    try {
+      await joinSharedDemo(role, true);
+    } catch (error) {
+      if (version === authVersion.current) setLoading(false);
+      throw error;
+    }
+    if (version !== authVersion.current) return;
     queryClient.clear();
-    setIsDemo(true);
     localStorage.setItem(KEY, JSON.stringify({ role }));
-    await joinSharedDemo();
-    setUser(demoProfile(role));
-    setLoading(false);
+    flushSync(() => {
+      setIsDemo(true);
+      setUser(demoProfile(role));
+      setLoading(false);
+    });
   };
   const logout = async () => {
+    authVersion.current++;
     localStorage.removeItem(KEY);
     if (isDemo) {
       setUser(null);
@@ -215,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const setRole = (role: Role) => {
     if (!isDemo) return;
+    authVersion.current++;
     queryClient.clear();
     localStorage.setItem(KEY, JSON.stringify({ role }));
     setUser(demoProfile(role));

@@ -44,6 +44,22 @@ export const sharedDemoAction = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    // Login and periodic refresh only read data. Taking a write transaction here
+    // made every role login queue behind unrelated edits and dashboard queries.
+    if (data.name === "snapshot") {
+      const row = (
+        await client.execute({
+          sql: "SELECT payload FROM demo_workspaces WHERE id=?",
+          args: [data.id],
+        })
+      ).rows[0];
+      if (!row) throw new Error("Shared demo not found. Ask the owner for a new link.");
+      return {
+        result: "null",
+        entries: JSON.parse(String(row.payload)) as Record<string, string>,
+        whatsapp: null,
+      };
+    }
     const transaction = await client.transaction("write");
     let response: { result: string; entries: Record<string, string> };
     let whatsappEventId: string | null = null;
@@ -57,18 +73,15 @@ export const sharedDemoAction = createServerFn({ method: "POST" })
       if (!row) throw new Error("Shared demo not found. Ask the owner for a new link.");
       const entries: Record<string, string> = JSON.parse(String(row.payload));
       const beforeIds = new Set(demoWhatsappMessages(entries).map((message) => message.id));
-      const result =
-        data.name === "snapshot"
-          ? null
-          : demoCall(data.name, data.input, {
-              role: data.role,
-              storage: {
-                getItem: (key) => entries[key] ?? null,
-                setItem: (key, value) => {
-                  entries[key] = value;
-                },
-              },
-            });
+      const result = demoCall(data.name, data.input, {
+        role: data.role,
+        storage: {
+          getItem: (key) => entries[key] ?? null,
+          setItem: (key, value) => {
+            entries[key] = value;
+          },
+        },
+      });
       if (JSON.stringify(entries).length > 8_000_000)
         throw new Error("Shared demo storage is full");
       await transaction.execute({

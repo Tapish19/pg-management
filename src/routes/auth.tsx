@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import type { Role } from "@/lib/demo-data";
-import { Building2, User, ShieldCheck, ArrowRight } from "lucide-react";
+import { Building2, User, ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -32,6 +32,11 @@ function AuthPage() {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [demoRole, setDemoRole] = useState<Role | null>(null);
+  const [demoError, setDemoError] = useState("");
+  const demoInFlight = useRef(false);
+  useEffect(() => setReady(true), []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,12 +92,18 @@ function AuthPage() {
   };
 
   const demo = async (role: Role) => {
+    if (demoInFlight.current || submitting) return;
+    demoInFlight.current = true;
+    setDemoRole(role);
+    setDemoError("");
     try {
-    await loginAs(role);
-    toast.success(`Signed in as ${role} (demo)`);
-    navigate({ to: "/dashboard" });
+      await loginAs(role);
+      await navigate({ to: "/dashboard" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not start demo");
+      setDemoError(error instanceof Error ? error.message : "Could not start demo");
+    } finally {
+      demoInFlight.current = false;
+      setDemoRole(null);
     }
   };
 
@@ -167,20 +178,39 @@ function AuthPage() {
               ].map(({ role, label, desc, icon: Icon }) => (
                 <button
                   key={role}
+                  type="button"
+                  disabled={!ready || submitting || demoRole !== null}
+                  aria-busy={demoRole === role}
                   onClick={() => demo(role)}
-                  className="group flex items-center gap-3 rounded-lg border bg-card p-3 text-left hover:border-primary hover:shadow-sm transition"
+                  className="group flex items-center gap-3 rounded-lg border bg-card p-3 text-left hover:border-primary hover:shadow-sm transition disabled:cursor-wait disabled:opacity-70"
                 >
                   <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold">{label}</div>
-                    <div className="text-xs text-muted-foreground">{desc}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {demoRole === role ? "Opening your demo…" : desc}
+                    </div>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                  {demoRole === role ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : (
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                  )}
                 </button>
               ))}
             </div>
+            {!ready && (
+              <p role="status" className="mt-3 text-xs text-muted-foreground">
+                Preparing demo…
+              </p>
+            )}
+            {demoError && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {demoError}
+              </p>
+            )}
           </Card>
 
           <Card className="p-6 sm:p-8">
@@ -205,7 +235,9 @@ function AuthPage() {
               </button>
             </div>
             <Tabs defaultValue="signin">
-              <TabsList className={`grid mb-6 ${audience === "owner" ? "grid-cols-2" : "grid-cols-1"}`}>
+              <TabsList
+                className={`grid mb-6 ${audience === "owner" ? "grid-cols-2" : "grid-cols-1"}`}
+              >
                 <TabsTrigger value="signin">Sign in</TabsTrigger>
                 {audience === "owner" && <TabsTrigger value="signup">Create account</TabsTrigger>}
               </TabsList>
@@ -255,7 +287,11 @@ function AuthPage() {
                       </button>
                     </div>
                   )}
-                  <Button type="submit" className="w-full" disabled={submitting}>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={submitting || demoRole !== null}
+                  >
                     {submitting ? "Signing in..." : "Sign in"}
                   </Button>
                 </form>
@@ -264,7 +300,11 @@ function AuthPage() {
                 <form onSubmit={handleSignUp} className="space-y-4">
                   <div>
                     <Label className="mb-1.5 block">Full name</Label>
-                    <Input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+                    <Input
+                      placeholder="Your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label className="mb-1.5 block">Email</Label>
@@ -284,7 +324,11 @@ function AuthPage() {
                       onChange={(e) => setPassword(e.target.value)}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={submitting}>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={submitting || demoRole !== null}
+                  >
                     {submitting ? "Creating account..." : "Create account"}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">
