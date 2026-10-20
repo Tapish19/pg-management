@@ -146,6 +146,7 @@ export const visitors = sqliteTable("visitors", {
   checkIn: text("check_in").notNull(),
   checkOut: text("check_out"),
   idVerified: integer("id_verified", { mode: "boolean" }).notNull().default(false),
+  approvalStatus: text("approval_status").notNull().default("approved"),
   createdAt: text("created_at").default(sql`(current_timestamp)`),
 });
 

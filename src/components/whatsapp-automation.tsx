@@ -20,6 +20,10 @@ const titles: Record<string, string> = {
   createMyComplaint: "New complaint",
   updateComplaint: "Complaint update",
   sendDemoRentReminders: "Rent reminders",
+  createMyVisitor: "Visitor request",
+  reviewVisitorRequest: "Visitor approval",
+  checkInVisitor: "Visitor check-in",
+  checkOutVisitor: "Visitor check-out",
 };
 const states: Record<string, string> = {
   accepted: "Accepted by Meta",
@@ -88,8 +92,9 @@ export function WhatsappAutomation() {
     <Card className="p-6 max-w-2xl space-y-4 my-4">
       <h2 className="font-semibold">Automatic WhatsApp demo messages</h2>
       <p className="text-sm text-muted-foreground">
-        Connect payment receipts, booking changes, new complaints, complaint updates and generated
-        rent reminders. Every message goes to your one configured test phone, labelled DEMO.
+        Connect payment receipts, booking changes, visitor requests and approvals, new complaints,
+        complaint updates and generated rent reminders. Every message goes to your one configured
+        test phone, labelled DEMO.
       </p>
       <ol className="list-decimal pl-5 text-sm space-y-1">
         <li>Send Hello World using the test above.</li>

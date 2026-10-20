@@ -45,6 +45,12 @@ The app reports **accepted by Meta**, which is not proof of delivery. It does no
 
 Every real message is labelled DEMO, including receipts, and no real money or booking is created. All intended tenant/owner updates go to **the same configured test recipient**, never the fictional phone numbers in demo records. Production/real-account workflows are not connected to this demo sender.
 
+### Visitor requests
+
+Tenant > My Visitors > Request visitor submits a **pending owner approval** request. This generates an owner alert and, while forwarding is on, a real WhatsApp update to the configured demo phone. Owner > Visitor Logbook shows pending requests first with **Approve / Reject** controls. A decision generates a tenant notification and a real demo-forwarded message. Repeating the same decision does not resend. Staff cannot approve requests.
+
+Approval does not check the guest in or verify their ID. Use **Check in** when an approved guest arrives, and **Check out** when they leave; those events also notify the tenant. Rejected/pending guests cannot check in. Existing historical log entries remain approved for compatibility; submit a new request to demonstrate the approval flow. Database migration 0003 adds approval status while preserving existing rows. The approval/check-in flow also works for real accounts, but real-account visitor events are not connected to this fixed-phone demo sender.
+
 Event messages are opt-in and off by default. They are written to an outbox in the same transaction as the demo mutation; Meta is contacted only after commit. Failures never roll back the PG action. At most five event-send attempts per minute and thirty per rolling day are allowed globally, separately from the Hello World button limits. Repeated actions that create no new notification do not send again. Forwarding expires after one hour and stops if the configured sender/recipient changes or demo sending is disabled.
 
 The UI asks you to confirm replying but cannot independently verify the 24-hour window; Meta enforces it. If Meta rejects a text outside the window, reply on your phone and perform a new action. Production messages outside this window require approved templates; this demo does not configure those. Temporary tokens can also expire. Accepted requests are not proof of delivery: there is no delivery webhook. Failed or interrupted attempts remain visible and are not automatically retried, avoiding duplicate sends if delivery is uncertain.

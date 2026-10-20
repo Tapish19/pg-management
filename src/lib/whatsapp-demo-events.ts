@@ -8,6 +8,10 @@ export const whatsappEventActions = new Set([
   "createMyComplaint",
   "updateComplaint",
   "sendDemoRentReminders",
+  "createMyVisitor",
+  "reviewVisitorRequest",
+  "checkInVisitor",
+  "checkOutVisitor",
 ]);
 
 export function demoWhatsappMessages(entries: Record<string, string>): DemoWhatsappMessage[] {

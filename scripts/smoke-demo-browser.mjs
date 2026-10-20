@@ -56,6 +56,7 @@ try {
   }
   browser = await chromium.launch({ channel: "chrome", headless: true });
   const context = await browser.newContext();
+  await context.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
   const page = await context.newPage();
   const errors = [],
     requests = [];
@@ -297,6 +298,7 @@ try {
   await linkInput.waitFor();
   const link = await linkInput.inputValue();
   const secondContext = await browser.newContext();
+  await secondContext.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
   const resident = await secondContext.newPage();
   resident.on("pageerror", (error) => errors.push(error.message));
   await resident.goto(link);
@@ -374,7 +376,34 @@ try {
   assert.equal(outbound[0].to, "919876543210");
   assert.ok(outbound[0].text.body.includes("Browser automatic WhatsApp leak"));
   assert.ok(outbound[0].text.body.includes("DEMO"));
-  await page.reload();
+  await resident.goto(`${base}/my-visitors`);
+  await resident.getByRole("button", { name: "Request visitor", exact: true }).click();
+  await resident
+    .getByRole("dialog")
+    .getByLabel("Visitor name", { exact: true })
+    .fill("Browser Family Guest");
+  await resident.getByRole("dialog").getByLabel("Purpose", { exact: true }).fill("Family visit");
+  await resident.getByRole("dialog").getByRole("button", { name: "Submit", exact: true }).click();
+  await resident.getByText("Visitor request sent to your owner", { exact: true }).waitFor();
+  await resident.getByText("Awaiting owner approval", { exact: true }).waitFor();
+  await page.goto(`${base}/visitors`);
+  const guestRow = page.getByRole("row").filter({ hasText: "Browser Family Guest" });
+  await guestRow.getByRole("button", { name: "Approve", exact: true }).click();
+  await page.getByText("Visitor approved", { exact: true }).waitFor();
+  await guestRow.getByText("Not arrived", { exact: true }).waitFor();
+  await guestRow.getByText("Unverified", { exact: true }).waitFor();
+  await resident.reload();
+  await resident.getByText("Approved · not arrived", { exact: true }).waitFor();
+  await guestRow.getByRole("button", { name: "Check in", exact: true }).click();
+  await page.getByText("Visitor checked in", { exact: true }).waitFor();
+  await guestRow.getByRole("button", { name: "Check out", exact: true }).click();
+  await page.getByText("Visitor checked out", { exact: true }).waitFor();
+  const visitorOutbound = fs.readFileSync(captureFile, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(visitorOutbound.length, 5);
+  assert.ok(visitorOutbound[1].text.body.includes("requested a visit"));
+  assert.ok(visitorOutbound[2].text.body.includes("approved by the owner"));
+  assert.ok(visitorOutbound[4].text.body.includes("checked out"));
+  await page.goto(`${base}/settings`);
   await page.getByRole("tab", { name: "Notifications", exact: true }).click();
   await page.getByText("New complaint · Accepted by Meta", { exact: true }).waitFor();
   await page.getByLabel("Automation passcode", { exact: true }).fill("browser-private-passcode");

@@ -13,10 +13,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { StatusPill } from "@/components/ui-ext/stat";
+import { StatusPill, statusTone } from "@/components/ui-ext/stat";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getMyVisitors, createMyVisitor } from "@/lib/demo-api";
+import { visitorVisitStatus } from "@/lib/visitor-approval";
 
 export const Route = createFileRoute("/_app/my-visitors")({ component: MyVisitorsPage });
 
@@ -30,6 +31,7 @@ function MyVisitorsPage() {
   const { data: visitors, isLoading } = useQuery({
     queryKey: ["my-visitors"],
     queryFn: () => getMyVisitors(),
+    refetchInterval: 10_000,
   });
 
   async function handleSubmit() {
@@ -40,11 +42,12 @@ function MyVisitorsPage() {
     setSubmitting(true);
     try {
       await createMyVisitor({ data: { name, purpose: purpose || undefined } });
-      toast.success("Visitor pre-approved");
+      toast.success("Visitor request sent to your owner");
       setOpen(false);
       setName("");
       setPurpose("");
       queryClient.invalidateQueries({ queryKey: ["my-visitors"] });
+      queryClient.invalidateQueries({ queryKey: ["visitors"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not add visitor");
     } finally {
@@ -56,28 +59,36 @@ function MyVisitorsPage() {
     <>
       <PageHeader
         title="My Visitors"
-        description="Pre-approve guests to skip the queue."
+        description="Request approval for a guest. Your owner must approve before arrival; approval does not verify ID."
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-1" />
-                Pre-approve
+                Request visitor
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Pre-approve visitor</DialogTitle>
+                <DialogTitle>Request visitor approval</DialogTitle>
               </DialogHeader>
               <div className="space-y-3">
                 <div>
                   <Label className="mb-1.5 block">Visitor name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                  <Input
+                    id="visitor-request-name"
+                    aria-label="Visitor name"
+                    maxLength={120}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Purpose</Label>
                   <Input
                     placeholder="e.g. Family visit"
+                    aria-label="Purpose"
+                    maxLength={500}
                     value={purpose}
                     onChange={(e) => setPurpose(e.target.value)}
                   />
@@ -101,12 +112,18 @@ function MyVisitorsPage() {
               <div>
                 <div className="font-medium">{v.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {v.purpose || "—"} · {new Date(v.checkIn).toLocaleString()}
+                  {v.purpose || "—"}
+                  {v.checkIn
+                    ? ` · Arrived ${new Date(v.checkIn).toLocaleString()}`
+                    : " · Not arrived"}
                 </div>
               </div>
-              <StatusPill tone={v.idVerified ? "success" : "warning"}>
-                {v.idVerified ? "Verified" : "Unverified"}
-              </StatusPill>
+              <div className="space-y-1 text-right">
+                <StatusPill tone={statusTone(v.approvalStatus)}>{visitorVisitStatus(v)}</StatusPill>
+                <p className="text-xs text-muted-foreground">
+                  ID {v.idVerified ? "verified" : "not verified"}
+                </p>
+              </div>
             </Card>
           ))
         )}

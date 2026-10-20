@@ -85,3 +85,5 @@ import * as api17 from "./api/functions/visitors-fns";
 export const listOwnerVisitors = withDemo("listOwnerVisitors", api17.listOwnerVisitors);
 export const createVisitor = withDemo("createVisitor", api17.createVisitor);
 export const checkOutVisitor = withDemo("checkOutVisitor", api17.checkOutVisitor);
+export const reviewVisitorRequest = withDemo("reviewVisitorRequest", api17.reviewVisitorRequest);
+export const checkInVisitor = withDemo("checkInVisitor", api17.checkInVisitor);

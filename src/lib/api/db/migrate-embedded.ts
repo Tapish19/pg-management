@@ -75,6 +75,17 @@ export async function migrateEmbedded(
         .split("--> statement-breakpoint")
         .filter((sql) => sql.trim())) {
         const tableMatch = statement.match(/^\s*CREATE TABLE\s+[`"]?(\w+)[`"]?\s*\(/i);
+        const addedColumn = statement.match(
+          /^\s*ALTER TABLE\s+[`"]?(\w+)[`"]?\s+ADD(?:\s+COLUMN)?\s+[`"]?(\w+)/i,
+        );
+        if (addedColumn && migration.snapshot) {
+          const [, table, column] = addedColumn;
+          const existing = await tx.execute(`PRAGMA table_info("${table}")`);
+          if (existing.rows.some((row) => row.name === column)) {
+            await validateExistingTable(tx, table, migration.snapshot.tables[table]);
+            continue;
+          }
+        }
         if (tableMatch) {
           const table = tableMatch[1];
           const definition = (migration.snapshot ?? (index === 0 ? initialSnapshot : undefined))

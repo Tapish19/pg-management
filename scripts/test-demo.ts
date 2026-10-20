@@ -307,6 +307,69 @@ assert.throws(
   /supported pages/,
 );
 role("tenant");
+const visitorRequest = demoCall("createMyVisitor", {
+  name: "Family Guest",
+  purpose: "Family visit",
+}) as { id: string };
+const visitorRows = () =>
+  demoCall("getMyVisitors") as {
+    id: string;
+    approvalStatus: string;
+    checkIn: string;
+    checkOut: string | null;
+    idVerified: boolean;
+  }[];
+assert.equal(visitorRows().find((v) => v.id === visitorRequest.id)?.approvalStatus, "pending");
+assert.equal(visitorRows().find((v) => v.id === visitorRequest.id)?.checkIn, "");
+assert.throws(
+  () => demoCall("createMyVisitor", { name: "Forged Guest", idVerified: true }),
+  /Unrecognized/,
+);
+assert.throws(
+  () => demoCall("reviewVisitorRequest", { id: visitorRequest.id, decision: "approved" }),
+  /not available|disabled access/,
+);
+role("staff");
+assert.throws(
+  () => demoCall("reviewVisitorRequest", { id: visitorRequest.id, decision: "approved" }),
+  /not available/,
+);
+assert.throws(() => demoCall("checkInVisitor", { id: visitorRequest.id }), /Only approved/);
+role("admin");
+assert.ok(
+  (demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.some(
+    (m) => m.event === `visitor-request:${visitorRequest.id}`,
+  ),
+);
+demoCall("reviewVisitorRequest", { id: visitorRequest.id, decision: "approved" });
+demoCall("reviewVisitorRequest", { id: visitorRequest.id, decision: "approved" });
+role("tenant");
+assert.equal(visitorRows().find((v) => v.id === visitorRequest.id)?.approvalStatus, "approved");
+assert.equal(visitorRows().find((v) => v.id === visitorRequest.id)?.checkIn, "");
+assert.equal(visitorRows().find((v) => v.id === visitorRequest.id)?.idVerified, false);
+assert.equal(
+  (demoCall("getDemoWhatsapp") as DemoWhatsappInbox).messages.filter(
+    (m) => m.event === `visitor-review:${visitorRequest.id}:approved`,
+  ).length,
+  1,
+);
+role("staff");
+demoCall("checkInVisitor", { id: visitorRequest.id });
+demoCall("checkInVisitor", { id: visitorRequest.id });
+demoCall("checkOutVisitor", { id: visitorRequest.id });
+demoCall("checkOutVisitor", { id: visitorRequest.id });
+role("tenant");
+assert.ok(visitorRows().find((v) => v.id === visitorRequest.id)?.checkOut);
+const rejectedVisitor = demoCall("createMyVisitor", { name: "Another Guest" }) as { id: string };
+role("admin");
+demoCall("reviewVisitorRequest", { id: rejectedVisitor.id, decision: "rejected" });
+assert.throws(
+  () => demoCall("reviewVisitorRequest", { id: rejectedVisitor.id, decision: "approved" }),
+  /already been decided/,
+);
+assert.throws(() => demoCall("checkInVisitor", { id: rejectedVisitor.id }), /Only approved/);
+assert.throws(() => demoCall("checkOutVisitor", { id: rejectedVisitor.id }), /Only checked-in/);
+role("tenant");
 const call = withDemo("getMyBooking", async () => {
   realCalls++;
   return null;

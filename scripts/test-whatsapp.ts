@@ -146,6 +146,10 @@ for (const [action, event] of [
   ["updateBookingStatus", "booking:b1:confirmed"],
   ["updateComplaint", "complaint:c1:resolved"],
   ["sendDemoRentReminders", "rent:b1:2026-10"],
+  ["createMyVisitor", "visitor-request:v1"],
+  ["reviewVisitorRequest", "visitor-review:v1:approved"],
+  ["checkInVisitor", "visitor-in:v1"],
+  ["checkOutVisitor", "visitor-out:v1"],
 ]) {
   const result = demoWhatsappEvent(action, new Set(), [message("new", event)])!;
   assert.ok(result.body.includes(event));

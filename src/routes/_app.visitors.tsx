@@ -13,8 +13,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StatusPill } from "@/components/ui-ext/stat";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StatusPill, statusTone } from "@/components/ui-ext/stat";
 import {
   Table,
   TableBody,
@@ -24,7 +30,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus } from "lucide-react";
-import { listOwnerVisitors, createVisitor, checkOutVisitor } from "@/lib/demo-api";
+import {
+  listOwnerVisitors,
+  createVisitor,
+  checkOutVisitor,
+  checkInVisitor,
+  reviewVisitorRequest,
+} from "@/lib/demo-api";
+import { useAuth } from "@/lib/auth";
 import { listOwnerProperties } from "@/lib/demo-api";
 import { listOwnerTenants } from "@/lib/demo-api";
 import { toast } from "sonner";
@@ -32,12 +45,15 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app/visitors")({ component: VisitorsPage });
 
 function VisitorsPage() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: visitors, isLoading } = useQuery({
     queryKey: ["visitors", "mine"],
     queryFn: () => listOwnerVisitors(),
+    refetchInterval: 10_000,
   });
 
   const { data: properties } = useQuery({
@@ -50,12 +66,30 @@ function VisitorsPage() {
     queryFn: () => listOwnerTenants(),
   });
 
-  async function handleCheckOut(id: string) {
+  async function handleAction(id: string, action: "approve" | "reject" | "checkIn" | "checkOut") {
+    setBusy(true);
     try {
-      await checkOutVisitor({ data: { id, checkOut: new Date().toISOString().slice(0, 16).replace("T", " ") } });
-      queryClient.invalidateQueries({ queryKey: ["visitors", "mine"] });
+      if (action === "approve" || action === "reject")
+        await reviewVisitorRequest({
+          data: { id, decision: action === "approve" ? "approved" : "rejected" },
+        });
+      else if (action === "checkIn") await checkInVisitor({ data: { id } });
+      else await checkOutVisitor({ data: { id, checkOut: new Date().toISOString() } });
+      await queryClient.invalidateQueries({ queryKey: ["visitors"] });
+      await queryClient.invalidateQueries({ queryKey: ["my-visitors"] });
+      toast.success(
+        action === "approve"
+          ? "Visitor approved"
+          : action === "reject"
+            ? "Visitor rejected"
+            : action === "checkIn"
+              ? "Visitor checked in"
+              : "Visitor checked out",
+      );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not check out visitor");
+      toast.error(err instanceof Error ? err.message : "Could not update visitor");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -63,7 +97,7 @@ function VisitorsPage() {
     <>
       <PageHeader
         title="Visitor Logbook"
-        description="All check-ins across the property."
+        description="Review guest requests and record arrivals and departures. Approval does not verify ID or check a guest in."
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -78,7 +112,13 @@ function VisitorsPage() {
               </DialogHeader>
               <NewVisitorForm
                 properties={properties || []}
-                tenants={(tenantRows || []).map((r) => ({ id: r.tenant!.id, name: r.tenant!.name }))}
+                tenants={(tenantRows || [])
+                  .filter((r) => r.tenant && ["active", "confirmed"].includes(r.booking.status))
+                  .map((r) => ({
+                    id: r.tenant!.id,
+                    name: r.tenant!.name,
+                    propertyId: r.booking.propertyId,
+                  }))}
                 onCreated={() => {
                   setOpen(false);
                   queryClient.invalidateQueries({ queryKey: ["visitors", "mine"] });
@@ -88,6 +128,12 @@ function VisitorsPage() {
           </Dialog>
         }
       />
+      {!!visitors?.some((v) => v.approvalStatus === "pending") && (
+        <p className="mb-4 text-sm font-medium">
+          {visitors.filter((v) => v.approvalStatus === "pending").length} visitor request(s) waiting
+          for owner approval.
+        </p>
+      )}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -97,21 +143,23 @@ function VisitorsPage() {
                 <TableHead>Visitor</TableHead>
                 <TableHead>Visiting</TableHead>
                 <TableHead>Purpose</TableHead>
+                <TableHead>Approval</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Check-out</TableHead>
                 <TableHead>ID verified</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : !visitors || visitors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     No visitors logged yet.
                   </TableCell>
                 </TableRow>
@@ -122,20 +170,57 @@ function VisitorsPage() {
                     <TableCell className="font-medium">{v.name}</TableCell>
                     <TableCell>{v.tenantName ?? "—"}</TableCell>
                     <TableCell>{v.purpose}</TableCell>
-                    <TableCell>{v.checkIn}</TableCell>
                     <TableCell>
-                      {v.checkOut ? (
-                        v.checkOut
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => handleCheckOut(v.id)}>
-                          Check out
-                        </Button>
-                      )}
+                      <StatusPill tone={statusTone(v.approvalStatus)}>
+                        {v.approvalStatus === "pending"
+                          ? "Pending approval"
+                          : v.approvalStatus === "approved"
+                            ? "Approved"
+                            : "Rejected"}
+                      </StatusPill>
                     </TableCell>
+                    <TableCell>{v.checkIn || "Not arrived"}</TableCell>
+                    <TableCell>{v.checkOut || "—"}</TableCell>
                     <TableCell>
                       <StatusPill tone={v.idVerified ? "success" : "warning"}>
                         {v.idVerified ? "Verified" : "Unverified"}
                       </StatusPill>
+                    </TableCell>
+                    <TableCell>
+                      {v.approvalStatus === "pending" ? (
+                        user?.role === "admin" ? (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => handleAction(v.id, "approve")}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() => handleAction(v.id, "reject")}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        ) : (
+                          "Awaiting owner"
+                        )
+                      ) : v.approvalStatus !== "approved" || v.checkOut ? (
+                        "—"
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => handleAction(v.id, v.checkIn ? "checkOut" : "checkIn")}
+                        >
+                          {v.checkIn ? "Check out" : "Check in"}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
@@ -154,11 +239,11 @@ function NewVisitorForm({
   onCreated,
 }: {
   properties: { id: string; name: string }[];
-  tenants: { id: string; name: string }[];
+  tenants: { id: string; name: string; propertyId: string }[];
   onCreated: () => void;
 }) {
   const [propertyId, setPropertyId] = useState(properties[0]?.id ?? "");
-  const [tenantId, setTenantId] = useState<string>(tenants[0]?.id ?? "none");
+  const [tenantId, setTenantId] = useState<string>("none");
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [idVerified, setIdVerified] = useState(false);
@@ -188,14 +273,24 @@ function NewVisitorForm({
   }
 
   if (properties.length === 0) {
-    return <p className="text-sm text-muted-foreground">Add a property first, then come back to log visitors.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        Add a property first, then come back to log visitors.
+      </p>
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
         <Label className="mb-1.5 block">Property</Label>
-        <Select value={propertyId} onValueChange={setPropertyId}>
+        <Select
+          value={propertyId}
+          onValueChange={(value) => {
+            setPropertyId(value);
+            setTenantId("none");
+          }}
+        >
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -216,11 +311,13 @@ function NewVisitorForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Not specific / delivery</SelectItem>
-            {tenants.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
+            {tenants
+              .filter((t) => t.propertyId === propertyId)
+              .map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
@@ -230,10 +327,18 @@ function NewVisitorForm({
       </div>
       <div>
         <Label className="mb-1.5 block">Purpose</Label>
-        <Input value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder="Family visit, delivery…" />
+        <Input
+          value={purpose}
+          onChange={(e) => setPurpose(e.target.value)}
+          placeholder="Family visit, delivery…"
+        />
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={idVerified} onChange={(e) => setIdVerified(e.target.checked)} />
+        <input
+          type="checkbox"
+          checked={idVerified}
+          onChange={(e) => setIdVerified(e.target.checked)}
+        />
         ID verified at gate
       </label>
       <Button type="submit" className="w-full" disabled={submitting}>

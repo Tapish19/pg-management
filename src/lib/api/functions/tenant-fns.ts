@@ -16,6 +16,7 @@ import {
 import { genId } from "../id";
 import { selectCurrentBooking } from "../../booking-selection";
 import { noticeVisibleToRoom } from "../../notice-audience";
+import { visitorRequestInput } from "../../visitor-approval";
 import { readOwnerSettings } from "./settings-fns";
 import {
   createTenantSessionToken,
@@ -170,9 +171,7 @@ export const getMyVisitors = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const createMyVisitor = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ name: z.string().min(2), purpose: z.string().optional() }).parse(input),
-  )
+  .validator((input: unknown) => visitorRequestInput.parse(input))
   .handler(async ({ data }) => {
     const session = requireTenantSession();
     const booking = await getPrimaryBooking(session.tenantId);
@@ -184,8 +183,9 @@ export const createMyVisitor = createServerFn({ method: "POST" })
       tenantId: session.tenantId,
       name: data.name,
       purpose: data.purpose,
-      checkIn: new Date().toISOString(),
+      checkIn: "",
       idVerified: false,
+      approvalStatus: "pending",
     });
     return { id };
   });

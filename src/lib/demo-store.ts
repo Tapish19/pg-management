@@ -24,6 +24,12 @@ import {
 export type DemoStorage = Pick<Storage, "getItem" | "setItem">;
 import type { DemoWhatsappState } from "./demo-whatsapp";
 import { rentDueDate } from "./owner-settings";
+import {
+  visitorRequestInput,
+  visitorReviewInput,
+  visitorReviewChanges,
+  compareVisitorRequests,
+} from "./visitor-approval";
 
 export const DEMO_SESSION_KEY = "pgone.session.v1";
 const DATA_KEY = "pgone.demo.data.v1";
@@ -210,6 +216,7 @@ function freshState(): State {
       checkIn: createdAt,
       checkOut: v.checkOut ? createdAt : null,
       idVerified: v.idVerified,
+      approvalStatus: "approved",
       createdAt,
     })),
     notices: D.NOTICES.map((n) => ({
@@ -239,6 +246,9 @@ function read(storage: DemoStorage = localStorage): State {
   const raw = storage.getItem(DATA_KEY);
   if (raw) {
     const state = JSON.parse(raw) as State;
+    state.visitors.forEach((visitor) => {
+      visitor.approvalStatus ??= "approved";
+    });
     seedPreferences(state);
     return state;
   }
@@ -305,7 +315,7 @@ export function demoCall(
     "undoDemoPayment",
   ];
   const ownerOnly =
-    /^(createProperty|updateProperty|deleteProperty|createRoom|updateRoom|deleteRoom|onboardTenant|updateTenantKyc|createStaff|updateStaff|updateStaffStatus|deleteStaff|recordStaffAttendance|listStaffAttendance|createExpense|updateExpenseStatus|deleteNotice|listOwnerPayments|getOwnerReports|getOwnerRoomMatches|listTenantRiskScores|getTenantRiskScore)$/;
+    /^(createProperty|updateProperty|deleteProperty|createRoom|updateRoom|deleteRoom|onboardTenant|updateTenantKyc|createStaff|updateStaff|updateStaffStatus|deleteStaff|recordStaffAttendance|listStaffAttendance|createExpense|updateExpenseStatus|deleteNotice|listOwnerPayments|getOwnerReports|getOwnerRoomMatches|listTenantRiskScores|getTenantRiskScore|reviewVisitorRequest)$/;
   if (
     (tenantOnly.includes(name) && role !== "tenant") ||
     (ownerOnly.test(name) && role !== "admin") ||
@@ -583,7 +593,8 @@ export function demoCall(
     case "listOwnerVisitors":
       return s.visitors
         .filter((v) => visible(v.propertyId))
-        .map((v) => ({ ...v, tenantName: s.tenants.find((t) => t.id === v.tenantId)?.name }));
+        .map((v) => ({ ...v, tenantName: s.tenants.find((t) => t.id === v.tenantId)?.name }))
+        .sort(compareVisitorRequests);
     case "listOwnerStaff":
       return s.staff
         .filter((t) => visible(t.propertyId))
@@ -847,27 +858,95 @@ export function demoCall(
     }
     case "createMyVisitor":
     case "createVisitor": {
-      const propertyId = name === "createMyVisitor" ? myBooking().propertyId : text("propertyId");
+      const request = name === "createMyVisitor";
+      const details = visitorRequestInput.parse(
+        request ? data : { name: data.name, purpose: data.purpose },
+      );
+      const booking = request ? myBooking() : null;
+      if (request && !booking) throw new Error("No active booking found");
+      const propertyId = request ? booking!.propertyId : text("propertyId");
       property(propertyId);
+      if (
+        !request &&
+        text("tenantId") &&
+        !s.bookings.some(
+          (b) =>
+            b.tenantId === text("tenantId") &&
+            b.propertyId === propertyId &&
+            ["active", "confirmed"].includes(b.status),
+        )
+      )
+        throw new Error("Tenant does not have an active booking at this property");
       const visitorId = id();
       s.visitors.push({
         id: visitorId,
         propertyId,
         tenantId: name === "createMyVisitor" ? user.id : text("tenantId") || null,
-        name: text("name"),
-        purpose: text("purpose"),
-        checkIn: text("checkIn") || timestamp(),
+        name: details.name,
+        purpose: details.purpose ?? "",
+        checkIn: request ? "" : text("checkIn") || timestamp(),
         checkOut: null,
-        idVerified: data.idVerified === true,
+        idVerified: !request && data.idVerified === true,
+        approvalStatus: request ? "pending" : "approved",
         createdAt: timestamp(),
       });
+      if (request)
+        sendWhatsapp(
+          "admin",
+          s.profiles.admin.id,
+          `visitor-request:${visitorId}`,
+          `${user.name} requested a visit from ${details.name} at ${property(propertyId).name}. Purpose: ${details.purpose || "Not specified"}. Open Visitor Logbook to approve or reject. The guest has not checked in.`,
+        );
       return save({ id: visitorId });
+    }
+    case "reviewVisitorRequest": {
+      const review = visitorReviewInput.parse(data);
+      const visitor = s.visitors.find((v) => v.id === review.id);
+      if (!visitor) throw new Error("Visitor not found");
+      property(visitor.propertyId);
+      if (!visitorReviewChanges(visitor.approvalStatus, review.decision)) return { ok: true };
+      visitor.approvalStatus = review.decision;
+      if (visitor.tenantId)
+        sendWhatsapp(
+          "tenant",
+          visitor.tenantId,
+          `visitor-review:${visitor.id}:${review.decision}`,
+          `Your visitor request for ${visitor.name} was ${review.decision} by the owner.${review.decision === "approved" ? " The guest can check in on arrival; ID verification is separate." : " Contact the owner if you need more information."}`,
+        );
+      return save();
+    }
+    case "checkInVisitor": {
+      const visitor = s.visitors.find((v) => v.id === text("id"));
+      if (!visitor) throw new Error("Visitor not found");
+      property(visitor.propertyId);
+      if (visitor.approvalStatus !== "approved" || visitor.checkOut)
+        throw new Error("Only approved visitors can check in");
+      if (visitor.checkIn) return { ok: true };
+      visitor.checkIn = timestamp();
+      if (visitor.tenantId)
+        sendWhatsapp(
+          "tenant",
+          visitor.tenantId,
+          `visitor-in:${visitor.id}`,
+          `Your visitor ${visitor.name} has checked in at ${property(visitor.propertyId).name}.`,
+        );
+      return save();
     }
     case "checkOutVisitor": {
       const v = s.visitors.find((v) => v.id === text("id"));
       if (!v) throw new Error("Visitor not found");
       property(v.propertyId);
+      if (v.approvalStatus !== "approved" || !v.checkIn)
+        throw new Error("Only checked-in approved visitors can check out");
+      if (v.checkOut) return { ok: true };
       v.checkOut = text("checkOut") || timestamp();
+      if (v.tenantId)
+        sendWhatsapp(
+          "tenant",
+          v.tenantId,
+          `visitor-out:${v.id}`,
+          `Your visitor ${v.name} has checked out of ${property(v.propertyId).name}.`,
+        );
       return save();
     }
     case "createNotice": {

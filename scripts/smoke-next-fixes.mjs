@@ -57,6 +57,10 @@ if (process.argv.includes("--preexisting-settings")) {
   await seedClient.execute(
     "INSERT INTO owner_settings (owner_id,organization_name,contact_email) VALUES ('upgrade-owner','Preserve these settings','upgrade@example.com')",
   );
+  // Simulate db:push having already added the visitor column without a migration entry.
+  await seedClient.execute(
+    "ALTER TABLE visitors ADD approval_status text DEFAULT 'approved' NOT NULL",
+  );
   seedClient.close();
 }
 const listener = net.createServer();
@@ -295,6 +299,66 @@ try {
     args: ["booking-a", "room-a", "property-a", "resident", today, 10000, "active"],
   });
   const settings = await rpc("getOwnerSettings", "GET");
+  const visitorRequest = await rpc(
+    "createMyVisitor",
+    "POST",
+    { name: "Resident Guest", purpose: "Family visit" },
+    residentCookie,
+  );
+  const myVisitors = () => rpc("getMyVisitors", "GET", undefined, residentCookie);
+  assert.equal(
+    (await myVisitors()).find((v) => v.id === visitorRequest.id).approvalStatus,
+    "pending",
+  );
+  assert.equal((await myVisitors()).find((v) => v.id === visitorRequest.id).checkIn, "");
+  await assert.rejects(
+    rpc(
+      "reviewVisitorRequest",
+      "POST",
+      { id: visitorRequest.id, decision: "approved" },
+      residentCookie,
+    ),
+  );
+  await assert.rejects(
+    rpc(
+      "reviewVisitorRequest",
+      "POST",
+      { id: visitorRequest.id, decision: "approved" },
+      ownerCookie("owner-b"),
+    ),
+    /not found/i,
+  );
+  await assert.rejects(rpc("checkInVisitor", "POST", { id: visitorRequest.id }), /Only approved/);
+  await rpc("reviewVisitorRequest", "POST", { id: visitorRequest.id, decision: "approved" });
+  await rpc("reviewVisitorRequest", "POST", { id: visitorRequest.id, decision: "approved" });
+  assert.equal((await myVisitors()).find((v) => v.id === visitorRequest.id).checkIn, "");
+  assert.equal((await myVisitors()).find((v) => v.id === visitorRequest.id).idVerified, false);
+  await assert.rejects(
+    rpc("checkInVisitor", "POST", { id: visitorRequest.id }, ownerCookie("owner-b")),
+    /not found/i,
+  );
+  await rpc("checkInVisitor", "POST", { id: visitorRequest.id });
+  await rpc("checkOutVisitor", "POST", {
+    id: visitorRequest.id,
+    checkOut: new Date().toISOString(),
+  });
+  assert.ok((await myVisitors()).find((v) => v.id === visitorRequest.id).checkOut);
+  const rejectedVisitor = await rpc(
+    "createMyVisitor",
+    "POST",
+    { name: "Rejected Guest" },
+    residentCookie,
+  );
+  await rpc("reviewVisitorRequest", "POST", { id: rejectedVisitor.id, decision: "rejected" });
+  await assert.rejects(rpc("checkInVisitor", "POST", { id: rejectedVisitor.id }), /Only approved/);
+  await assert.rejects(
+    rpc(
+      "createMyVisitor",
+      "POST",
+      { name: "Forged Guest", approvalStatus: "approved", idVerified: true },
+      residentCookie,
+    ),
+  );
   const lifestyle = {
     sleepSchedule: "early_bird",
     cleanliness: 4,
@@ -791,8 +855,41 @@ try {
   });
   assert.equal(dailyLimited.whatsapp.status, "skipped");
   assert.equal(captured().length, 5, "Daily limit also prevents provider calls");
+  // Visitor requests and owner decisions share the same opted-in transport.
+  await client.execute("DELETE FROM whatsapp_event_outbox");
+  await forwarding();
+  const guest = JSON.parse(
+    (
+      await automatic("tenant", "createMyVisitor", {
+        name: "WhatsApp Family Guest",
+        purpose: "Family visit",
+      })
+    ).result,
+  );
+  assert.equal(captured().length, 6);
+  assert.ok(captured()[5].text.body.includes("requested a visit"));
+  assert.ok(captured()[5].text.body.includes("not checked in"));
+  await assert.rejects(
+    automatic("tenant", "reviewVisitorRequest", { id: guest.id, decision: "approved" }),
+  );
+  await assert.rejects(
+    automatic("staff", "reviewVisitorRequest", { id: guest.id, decision: "approved" }),
+  );
+  await automatic("admin", "reviewVisitorRequest", { id: guest.id, decision: "approved" });
+  await automatic("admin", "reviewVisitorRequest", { id: guest.id, decision: "approved" });
+  assert.equal(captured().length, 7);
+  assert.ok(captured()[6].text.body.includes("approved by the owner"));
+  const guestRecord = JSON.parse((await automatic("tenant", "getMyVisitors")).result).find(
+    (v) => v.id === guest.id,
+  );
+  assert.equal(guestRecord.checkIn, "");
+  assert.equal(guestRecord.idVerified, false);
+  await automatic("staff", "checkInVisitor", { id: guest.id });
+  await automatic("staff", "checkOutVisitor", { id: guest.id });
+  assert.equal(captured().length, 9);
+  assert.ok(captured()[8].text.body.includes("checked out"));
   console.log(
-    "Automatic WhatsApp events passed: opt in, fixed recipient, complaints, bookings, payments, reminders, concurrency, provider failure, limits, disable and expiry. All provider sends mocked.",
+    "Automatic WhatsApp events passed: visitors and approvals, opt in, fixed recipient, complaints, bookings, payments, reminders, concurrency, provider failure, limits, disable and expiry. All provider sends mocked.",
   );
   console.log(
     "Production smoke passed: migrations, owner isolation, saved settings, edits, KYC, notifications, attendance, atomic onboarding and public listing/detail pages.",
